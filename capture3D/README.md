@@ -1,4 +1,4 @@
-## Developped by Nizar Ouarti allow to capture 3D data from realsense and extract calibration data
+## Developped by Nizar Ouarti allows to capture 3D data from realsense and extract calibration data
 
 #The dependcies are the folowing, on linux use apt-get:
 	cmake
@@ -15,5 +15,5 @@ eigen is a a header library
 
 ## usage
 
-./capture3D
+	./capture3D
 press 's' to save a frame (rgb and depth) and 'q' to quit
