@@ -1,4 +1,5 @@
-## Developped by Nizar Ouarti allows to capture 3D data from realsense and extract calibration data
+## Developped by Nizar Ouarti 
+## Allows to capture 3D data from realsense and extract calibration data
 
 #The dependcies are the folowing, on linux use apt-get:
 	cmake
