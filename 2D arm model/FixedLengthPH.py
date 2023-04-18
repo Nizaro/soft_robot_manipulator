@@ -60,12 +60,23 @@ def PHFindA(a,b,c,t):
         X=-np.sqrt(3*a)/2
     else:
         k=(b*t1)/(a*t2)
+        '''
         A=1/(8*(k**2+1))
         B1=(c**2)*(4*k+4*np.sqrt(3))**2
         B2=-4*(4*k**2+4)*((a**2)*(-3*k**2+2*np.sqrt(3)*k-1)+4*c**2)
         C=-c*k-4*np.sqrt(3)*c
         x1=A*(-np.sqrt(B1+B2)+C)
         x2=A*(np.sqrt(B1+B2)+C)
+        '''
+        A=4*(1+k**2)
+        B=4*c*(k+np.sqrt(3))
+        C=4*c**2-(a-a*np.sqrt(3)*k)**2
+        
+        x1=(-B+np.sqrt(B**2-4*A*C))/(2*A)
+        x2=(-B-np.sqrt(B**2-4*A*C))/(2*A)
+        
+        print(x1)
+        print(x2)
         if x1==x2:
             X=x1
         else:
@@ -74,6 +85,10 @@ def PHFindA(a,b,c,t):
             if X[i]>a or X[i]<-a:
                 X=np.delete(X,i)
                 break
+        for i in range(X.size):
+            if X[i]>a or X[i]<-a:
+                X=np.delete(X,i)
+                break    
             
         return X
 
@@ -95,7 +110,7 @@ def FixedLengthPH(p0,p1,L,t):
     b=np.sqrt(a**2-c**2)
     B=(p1+p0)/2
     Mult=np.cos(theta)-np.sin(theta)*1j
-    
+
     p0c=(p0-B)*Mult
     p1c=(p1-B)*Mult
     tc=t*Mult
@@ -113,9 +128,8 @@ def FixedLengthPH(p0,p1,L,t):
     XA=PHFindA(a,b,c,tc)
     XB=PHsolveB(a,b,c,tc)
     
-    X=np.append(XA,XB)
-    #X=XA
-    print(flip)
+    #X=np.append(XA,XB)
+    X=XA
     Y=np.empty(X.size)
     Y=b*np.sqrt(1-(X**2/a**2))
     
@@ -137,20 +151,37 @@ def FixedLengthPH(p0,p1,L,t):
     sqdeltp1=np.sqrt(p1-P)
     
     z0=(np.sqrt(2)/2)*(+(1+np.sqrt(3))*sqdeltp0+(1-np.sqrt(3))*sqdeltp1) 
-    z0=np.append(z0,(np.sqrt(2)/2)*(+(1+np.sqrt(3))*sqdeltp0-(1-np.sqrt(3))*sqdeltp1) ) 
+    z0=np.append(z0,(np.sqrt(2)/2)*(+(1+np.sqrt(3))*sqdeltp0-(1-np.sqrt(3))*sqdeltp1)) 
     z1=(np.sqrt(2)/2)*(+(1-np.sqrt(3))*sqdeltp0+(1+np.sqrt(3))*sqdeltp1)
     z1=np.append(z1,(np.sqrt(2)/2)*(+(1-np.sqrt(3))*sqdeltp0-(1+np.sqrt(3))*sqdeltp1))
-    
+    #z0=np.append(z0,-z0)
+    #z1=np.append(z1,-z1)
     #configuration filtering
     m=np.imag(z0**2/t)
+    n=np.real(z0**2/t)
+    print('aaa')
+    print(sqdeltp0)
+    print(sqdeltp1)
+    print(n)
+    Bad=[]
+    
+    for j in range(z0.size):
+        if n[j]<0:
+            Bad.append([j])
+            
+    m=np.delete(m,Bad)
+    z0=np.delete(z0,Bad)
+    z1=np.delete(z1,Bad)
     
     for j in range(z0.size):
         if m[j]**2==min(m**2):
             z0=z0[j]
             z1=z1[j]
+            break
+    
     #Curve computation
     temp=np.linspace(0,1,101,dtype=complex)
-    #i=0  #for debuging
+    #i=0 #for debuging
     #r0=p0+((-temp*z0[i]+temp*z1[i]+z0[i])**3-z0[i]**3)/(3*(z1[i]-z0[i]))
     r0=p0+((-temp*z0+temp*z1+z0)**3-z0**3)/(3*(z1-z0))
 
@@ -158,7 +189,7 @@ def FixedLengthPH(p0,p1,L,t):
 
 L=2
 p0=0
-p1=1.1j
+p1=1+0.2j
 t=1
 
 z0,z1,r0=FixedLengthPH(p0,p1,L,t)
@@ -183,10 +214,10 @@ p=np.empty(n+1,dtype=complex)
 z=np.empty(2*n+1,dtype=complex)
 p[0]=0
 p[1]=1.96+0.35j
-p[2]=3.94+0.35j
-p[3]=5.25-0.95j
-p[4]=3.93-2.1j
-p[5]=2.55-0.95j
+p[2]=3.9+0.15j
+p[3]=4.5-1.55j
+p[4]=2.8-1.8j
+p[5]=1.5-2j
 t=1
 
 plt.scatter(np.real(p),np.imag(p))
@@ -198,7 +229,7 @@ color=['b','g','r','c','m','y','k']
 
 for i in range(n):
     ta[:,i]=np.array([p[i],p[i]+L*z[2*i]**2/np.abs(z[2*i]**2)])
-    #plt.plot(np.real(ta[:,i]),np.imag(ta[:,i]),color=color[i]) #affichage des segment "sans flexion"
+    plt.plot(np.real(ta[:,i]),np.imag(ta[:,i]),color=color[i]) #affichage des segment "sans flexion"
     
     z[2*i+1],z[2*i+2],r[:,i]=FixedLengthPH(p[i],p[i+1],L,z[2*i]**2)
     plt.plot(np.real(r[:,i]),np.imag(r[:,i]),color=color[i])
