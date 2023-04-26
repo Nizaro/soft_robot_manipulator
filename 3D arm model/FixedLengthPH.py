@@ -266,22 +266,49 @@ L=2
 n=4
 p=np.empty([3,n+1])
 t=np.empty([3,n+1])
+x=np.empty([3,n+1])
+y=np.empty([3,n+1])
+x[:,0]=np.array([1,0,0])
+y[:,0]=np.array([0,1,0])
+t[:,0]=np.array([0,0,1])
 p[:,0]=np.array([0,0,0])
+
 p[:,1]=np.array([0.5,0.7,1.7])
 p[:,2]=np.array([-0.6,0.5,3])
 p[:,3]=np.array([0,-0.8,3.8])
 p[:,4]=np.array([1,0.5,3.5])
-t[:,0]=np.array([0,0,1])
+
 r=np.empty([101,3,n+1])
 
 color=['b','g','r','c','m','y','k']
 ax = plt.axes(projection='3d')
+ax.set_aspect('equal')
 
+zv=np.array([p[:,0],p[:,0]+t[:,0]*0.3/np.linalg.norm(t[:,0])])
+xv=np.array([p[:,0],p[:,0]+x[:,0]*0.3])
+yv=np.array([p[:,0],p[:,0]+y[:,0]*0.3])
+
+ax.plot3D(zv[:,0],zv[:,1],zv[:,2],color=color[0])
+ax.plot3D(xv[:,0],xv[:,1],xv[:,2],color=color[1])
+ax.plot3D(yv[:,0],yv[:,1],yv[:,2],color=color[2])
 
 for i in range(n):
-    print(i)
-    (t[:,i+1],r[:,:,n])=PH3D(p[:,i],p[:,i+1],t[:,i],L)
-    ax.plot3D(r[:,0,n],r[:,1,n],r[:,2,n],label='Solution')
+    (t[:,i+1],r[:,:,i])=PH3D(p[:,i],p[:,i+1],t[:,i],L)
+    ax.plot3D(r[:,0,i],r[:,1,i],r[:,2,i],label='Solution')
+    
+    axerot=np.cross(t[:,i],t[:,i+1])/np.linalg.norm(np.cross(t[:,i],t[:,i+1]))
+    alpha=np.arccos(np.dot(t[:,i],t[:,i+1])/(np.linalg.norm(t[:,i])*np.linalg.norm(t[:,i+1])))
+    rot=Rot.from_rotvec(alpha*axerot)
+    x[:,i+1]=rot.apply(x[:,i])
+    y[:,i+1]=rot.apply(y[:,i])
+    print(alpha)
+    zv=np.array([p[:,i+1],p[:,i+1]+t[:,i+1]*0.3/np.linalg.norm(t[:,i+1])])
+    xv=np.array([p[:,i+1],p[:,i+1]+x[:,i+1]*0.3])
+    yv=np.array([p[:,i+1],p[:,i+1]+y[:,i+1]*0.3])
+    
+    ax.plot3D(zv[:,0],zv[:,1],zv[:,2],color=color[0])
+    ax.plot3D(xv[:,0],xv[:,1],xv[:,2],color=color[1])
+    ax.plot3D(yv[:,0],yv[:,1],yv[:,2],color=color[2])
 
 # (t1,r0)=PH3D(p0,p1,t0,L)
 # tv=np.array([p0,p0+t0])
