@@ -234,8 +234,8 @@ def PH3D(p0,p1,t0,L):
 
     return(t1,r0)
     
-#Input point
-
+#Single segment interpolation
+'''
 L=2
 p0=np.array([1,0,0])
 p1=np.array([1.2,0.2,0.6])
@@ -259,3 +259,44 @@ ax.set_zlabel('z')
 ax.legend(loc='upper left')
 ax.set_aspect('equal')
 plt.show()
+'''
+#Multi-segment interpolation
+
+L=2
+n=4
+p=np.empty([3,n+1])
+t=np.empty([3,n+1])
+p[:,0]=np.array([0,0,0])
+p[:,1]=np.array([0.5,0.7,1.7])
+p[:,2]=np.array([-0.6,0.5,3])
+p[:,3]=np.array([0,-0.8,3.8])
+p[:,4]=np.array([1,0.5,3.5])
+t[:,0]=np.array([0,0,1])
+r=np.empty([101,3,n+1])
+
+color=['b','g','r','c','m','y','k']
+ax = plt.axes(projection='3d')
+
+
+for i in range(n):
+    print(i)
+    (t[:,i+1],r[:,:,n])=PH3D(p[:,i],p[:,i+1],t[:,i],L)
+    ax.plot3D(r[:,0,n],r[:,1,n],r[:,2,n],label='Solution')
+
+# (t1,r0)=PH3D(p0,p1,t0,L)
+# tv=np.array([p0,p0+t0])
+# t1v=np.array([p1,p1+t1*L/np.linalg.norm(t1)])
+
+
+# ax.scatter(p0[0],p0[1],p0[2],color=color[0],label='Input points')
+# ax.scatter(p1[0],p1[1],p1[2],color=color[1])
+# ax.plot3D(tv[:,0],tv[:,1],tv[:,2],label='Input tangent')
+# ax.plot3D(r0[:,0],r0[:,1],r0[:,2],label='Solution')
+# ax.plot3D(t1v[:,0],t1v[:,1],t1v[:,2],label='output direction')
+ax.set_xlabel('x')
+ax.set_ylabel('y')
+ax.set_zlabel('z')
+ax.legend(loc='upper left')
+ax.set_aspect('equal')
+plt.show()
+
