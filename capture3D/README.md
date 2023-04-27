@@ -2,11 +2,14 @@
 ## Developped by Nizar Ouarti 
 
 ## The dependcies are the folowing, on linux use apt-get:
-	cmake
+	cmake 
+		linux: sudo apt-get install cmake
 	opencv
-	pcl version 1.8
+		linux: script d'intallation: https://github.com/milq/milq/blob/master/scripts/bash/install-opencv.sh
+	pcl version >= 1.8  
+		linux: sudo apt install libpcl-dev
 	eigen3
-eigen is a a header library
+		eigen is a a header library: download the .h
 
 ##  Compilation
 	mkdir build
