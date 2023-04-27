@@ -204,4 +204,4 @@ for i in range(n):
     plt.plot(np.real(r[:,i]),np.imag(r[:,i]),color=color[i])
 
 
-    
+plt.show()   
