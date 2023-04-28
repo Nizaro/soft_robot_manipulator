@@ -179,7 +179,6 @@ def FixedLengthPH(p0,p1,L,t):
     #i=0 #for debuging
     #r0=p0+((-temp*z0[i]+temp*z1[i]+z0[i])**3-z0[i]**3)/(3*(z1[i]-z0[i]))
     t=(z0*(1-temp)+z1*temp)**2
-    print(t)
     r0=p0+((-temp*z0+temp*z1+z0)**3-z0**3)/(3*(z1-z0))
     return z0,z1,r0,t  
 
@@ -247,13 +246,28 @@ def PH3D(p0,p1,t0,L):
         t[:,i]=Rinv.apply(tb[:,i])
     for i in range(100):
         alpha=np.arccos(np.dot(t0,t[:,i+1])/(np.linalg.norm(t0)*np.linalg.norm(t[:,i+1])))
-        print(alpha)
         rotb=Rot.from_rotvec(alpha*axerot)
         rot[i+1]=rotb
 
-    return(t1,r0,rot,t)
+    return(t1,r0,rot)
     
+def MultiPH3D(p,L):
+    n=p.size//3
+    r=np.empty([101,3,n])
+    q=np.empty([101,n],dtype=rotation)
+    Q=np.empty([101,n],dtype=rotation)
+    t=np.empty([3,n+1])
+    t[:,0]=np.array([0,0,1])
+    Q1=Rot.identity()
+    for i in range(n-1):
+        (t[:,i+1],r[:,:,i],q[:,i])=PH3D(p[:,i],p[:,i+1],t[:,i],L)
+        
+        
+        for j in range(101):
+            Q[j,i]=q[j,i]*Q1
 
+        Q1=Q[100,i]
+    return r,Q
 rotation=np.dtype(Rot)
 
 #Single segment interpolation
@@ -283,7 +297,7 @@ ax.set_aspect('equal')
 plt.show()
 '''
 #Multi-segment interpolation
-
+'''
 L=2
 n=4
 p=np.empty([3,n+1])
@@ -302,70 +316,73 @@ p[:,1]=np.array([0.5,0.7,1.7])
 p[:,2]=np.array([-0.6,0.5,3])
 p[:,3]=np.array([0,-0.8,3.8])
 p[:,4]=np.array([1,0.5,3.5])
-
-r=np.empty([101,3,n])
-q=np.empty([101,n],dtype=rotation)
-Q=np.empty([101,n],dtype=rotation)
+(r,Q)=MultiPH3D(p,L)
 
 
 color=['b','g','r','c','m','y','k']
 ax = plt.axes(projection='3d')
 ax.set_aspect('equal')
 
-zv=np.array([p[:,0],p[:,0]+t[:,0]*0.3/np.linalg.norm(t[:,0])])
-xv=np.array([p[:,0],p[:,0]+x[:,0]*0.3])
-yv=np.array([p[:,0],p[:,0]+y[:,0]*0.3])
 
-ax.plot3D(zv[:,0],zv[:,1],zv[:,2],color=color[0])
-ax.plot3D(xv[:,0],xv[:,1],xv[:,2],color=color[1])
-ax.plot3D(yv[:,0],yv[:,1],yv[:,2],color=color[2])
-tang=np.array([3,101])
-Q1=Rot.identity()
 for i in range(n):
-    (t[:,i+1],r[:,:,i],q[:,i],tang)=PH3D(p[:,i],p[:,i+1],t[:,i],L)
-    ax.plot3D(r[:,0,i],r[:,1,i],r[:,2,i],label='Solution')
-    
-    axerot=np.cross(t[:,i],t[:,i+1])/np.linalg.norm(np.cross(t[:,i],t[:,i+1]))
-    alpha=np.arccos(np.dot(t[:,i],t[:,i+1])/(np.linalg.norm(t[:,i])*np.linalg.norm(t[:,i+1])))
-    rot=Rot.from_rotvec(alpha*axerot)
-    x[:,i+1]=rot.apply(x[:,i])
-    y[:,i+1]=rot.apply(y[:,i])
-    zv=np.array([p[:,i+1],p[:,i+1]+t[:,i+1]*0.6/np.linalg.norm(t[:,i+1])])
-    xv=np.array([p[:,i+1],p[:,i+1]+x[:,i+1]*0.6])
-    yv=np.array([p[:,i+1],p[:,i+1]+y[:,i+1]*0.6])
-    #ax.plot3D(zv[:,0],zv[:,1],zv[:,2],color=color[0])
-    #ax.plot3D(xv[:,0],xv[:,1],xv[:,2],color=color[1])
-    #ax.plot3D(yv[:,0],yv[:,1],yv[:,2],color=color[2])
-    
-    for j in range(101):
-        Q[j,i]=q[j,i]*Q1
-        Qx=Q[j,i].apply(Ex)
-        Qy=Q[j,i].apply(Ey)
-        Qz=Q[j,i].apply(Ez)
-        if j%10==0:
-            Qxv=np.array([r[j,:,i],r[j,:,i]+Qx/3])
-            Qyv=np.array([r[j,:,i],r[j,:,i]+Qy/3])
-            Qzv=np.array([r[j,:,i],r[j,:,i]+Qz/3])
-            ax.plot3D(Qxv[:,0],Qxv[:,1],Qxv[:,2],color=color[1])
-            ax.plot3D(Qyv[:,0],Qyv[:,1],Qyv[:,2],color=color[2])
-            #ax.plot3D(Qzv[:,0],Qzv[:,1],Qzv[:,2],color=color[0])
+    ax.plot3D(r[:,0,i],r[:,1,i],r[:,2,i])
+
+
+    for j in range(10):
+        Qx=Q[10*j,i].apply(Ex)
+        Qy=Q[10*j,i].apply(Ey)
+        Qz=Q[10*j,i].apply(Ez)
+        Qxv=np.array([r[10*j,:,i],r[10*j,:,i]+Qx/3])
+        Qyv=np.array([r[10*j,:,i],r[10*j,:,i]+Qy/3])
+        Qzv=np.array([r[10*j,:,i],r[10*j,:,i]+Qz/3])
+        ax.plot3D(Qxv[:,0],Qxv[:,1],Qxv[:,2],color=color[1])
+        ax.plot3D(Qyv[:,0],Qyv[:,1],Qyv[:,2],color=color[2])
+        #ax.plot3D(Qzv[:,0],Qzv[:,1],Qzv[:,2],color=color[0])
     Q1=Q[100,i]
 
 
-# (t1,r0)=PH3D(p0,p1,t0,L)
-# tv=np.array([p0,p0+t0])
-# t1v=np.array([p1,p1+t1*L/np.linalg.norm(t1)])
-
-
-# ax.scatter(p0[0],p0[1],p0[2],color=color[0],label='Input points')
-# ax.scatter(p1[0],p1[1],p1[2],color=color[1])
-# ax.plot3D(tv[:,0],tv[:,1],tv[:,2],label='Input tangent')
-# ax.plot3D(r0[:,0],r0[:,1],r0[:,2],label='Solution')
-# ax.plot3D(t1v[:,0],t1v[:,1],t1v[:,2],label='output direction')
 ax.set_xlabel('x')
 ax.set_ylabel('y')
 ax.set_zlabel('z')
-ax.legend(loc='upper left')
 ax.set_aspect('equal')
-plt.show()
 
+plt.show()
+'''
+#surface construction
+ax = plt.axes(projection='3d')
+L=2
+n=4
+k=15
+ray=0.2
+p=np.empty([3,n+1])
+t=np.empty([3,n+1])
+x=np.empty([3,n+1])
+y=np.empty([3,n+1])
+Ex=np.array([1,0,0])
+Ey=np.array([0,1,0])
+Ez=np.array([0,0,1])
+x[:,0]=np.array([1,0,0])
+y[:,0]=np.array([0,1,0])
+t[:,0]=np.array([0,0,1])
+p[:,0]=np.array([0,0,0])
+
+p[:,1]=np.array([0.5,0.7,1.7])
+p[:,2]=np.array([-0.6,0.5,3])
+p[:,3]=np.array([0,-0.8,3.8])
+p[:,4]=np.array([1,0.5,3.5])
+(r,Q)=MultiPH3D(p,L)
+S=np.empty([3,101,n,k])
+rn=np.empty([3,k])
+for i in range(k):
+    rn[:,i]=ray*np.cos(np.pi*2*i/k)*Ex+ray*np.sin(np.pi*2*i/k)*Ey
+    for j in range(n):
+        for m in range(101):
+            S[:,m,j,i]=r[m,:,j]+Q[m,j].apply(rn[:,i])
+            print(S[:,m,j,i])
+        ax.plot3D(S[0,:,j,i],S[1,:,j,i],S[2,:,j,i],color='b')
+        
+ax.set_xlabel('x')
+ax.set_ylabel('y')
+ax.set_zlabel('z')
+ax.set_aspect('equal')
+plt.show()       
