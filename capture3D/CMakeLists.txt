@@ -23,12 +23,13 @@ target_link_libraries(${prg_name}
       )
     
 INCLUDE_DIRECTORIES(
-  /usr/local/include/pcl-1.8/
+  /usr/include/pcl-1.12/
   /usr/include/eigen3
+  /usr/local/include/opencv4/ 
   )
 
     
 set_target_properties(${prg_name} PROPERTIES
-    COMPILE_FLAGS "-O3 -Wno-deprecated -std=c++11 `pkg-config --libs opencv` "
+    COMPILE_FLAGS "-O3 -Wno-deprecated -std=c++14 `pkg-config --libs opencv` "
     )
 

@@ -5,10 +5,10 @@
 //#include <rs_types.h>
 #include <librealsense2/hpp/rs_internal.hpp>
 
-#include <opencv2/opencv.hpp>
-#include <opencv2/highgui/highgui.hpp>
+#include <opencv4/opencv2/opencv.hpp>
+#include <opencv4/opencv2/highgui/highgui.hpp>
 
-#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv4/opencv2/imgproc/imgproc.hpp>
 
 //#include <opencv2/calib3d.hpp>//rodriguez
 

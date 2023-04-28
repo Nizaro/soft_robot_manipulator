@@ -202,22 +202,6 @@ def PH3D(p0,p1,t0,L):
     pb1=R.apply(pa1)
     tb0=R.apply(t0)
     
-    
-    
-    #tbv=np.array([[0,0,0],tb0])
-    #rv=np.array([[0,0,0],r])
-    #nv=np.array([[0,0,0],n])
-    
-    
-    #ax.scatter(pb0[0],pb0[1],pb0[2],marker="*",color=color[0],label='rotated points')
-    #ax.scatter(pb1[0],pb1[1],pb1[2],marker="*",color=color[1])
-    #ax.scatter(pb0[0],pa0[1],pa0[2],marker="+",color=color[0],label='Offset points')
-    #ax.scatter(pb1[0],pa1[1],pa1[2],marker="+",color=color[1])
-    
-    #ax.plot3D(rv[:,0],rv[:,1],rv[:,2],label='Rotation axis')
-    #ax.plot3D(nv[:,0],nv[:,1],nv[:,2],label='Normal to the plane')
-    #ax.plot3D([0,0],[0,0],[0,1])
-    
     #Formating for 2D function
     p02D=pb0[0]+pb0[1]*1j
     p12D=pb1[0]+pb1[1]*1j
@@ -232,19 +216,18 @@ def PH3D(p0,p1,t0,L):
     rot=np.empty(101,dtype=rotation)
     t=np.empty([3,101])
     
-    
-    
     #rotation to initial reference
     r0=Rinv.apply(rb0)-offset
     z0=Rinv.apply(zb0)
     t1=Rinv.apply(tb1)
     
     #Rotation computation
-    axerot=np.cross(t0,t1)/np.linalg.norm(np.cross(t0,t1))
+    #axerot=np.cross(t0,t1)/np.linalg.norm(np.cross(t0,t1))
     rot[0]=Rot.identity()
     for i in range (101):
         t[:,i]=Rinv.apply(tb[:,i])
     for i in range(100):
+        axerot=np.cross(t0,t[:,i])/np.linalg.norm(np.cross(t0,t[:,i]))
         alpha=np.arccos(np.dot(t0,t[:,i+1])/(np.linalg.norm(t0)*np.linalg.norm(t[:,i+1])))
         rotb=Rot.from_rotvec(alpha*axerot)
         rot[i+1]=rotb
@@ -259,6 +242,7 @@ def MultiPH3D(p,L):
     t=np.empty([3,n+1])
     t[:,0]=np.array([0,0,1])
     Q1=Rot.identity()
+    tang=np.empty([3,101,n])
     for i in range(n-1):
         (t[:,i+1],r[:,:,i],q[:,i])=PH3D(p[:,i],p[:,i+1],t[:,i],L)
         
@@ -316,6 +300,7 @@ p[:,1]=np.array([0.5,0.7,1.7])
 p[:,2]=np.array([-0.6,0.5,3])
 p[:,3]=np.array([0,-0.8,3.8])
 p[:,4]=np.array([1,0.5,3.5])
+tang=np.empty([3,101,n])
 (r,Q)=MultiPH3D(p,L)
 
 
@@ -332,12 +317,13 @@ for i in range(n):
         Qx=Q[10*j,i].apply(Ex)
         Qy=Q[10*j,i].apply(Ey)
         Qz=Q[10*j,i].apply(Ez)
+        #Qz=tang[:,10*j,i]
         Qxv=np.array([r[10*j,:,i],r[10*j,:,i]+Qx/3])
         Qyv=np.array([r[10*j,:,i],r[10*j,:,i]+Qy/3])
         Qzv=np.array([r[10*j,:,i],r[10*j,:,i]+Qz/3])
         ax.plot3D(Qxv[:,0],Qxv[:,1],Qxv[:,2],color=color[1])
         ax.plot3D(Qyv[:,0],Qyv[:,1],Qyv[:,2],color=color[2])
-        #ax.plot3D(Qzv[:,0],Qzv[:,1],Qzv[:,2],color=color[0])
+        ax.plot3D(Qzv[:,0],Qzv[:,1],Qzv[:,2],color=color[0])
     Q1=Q[100,i]
 
 
@@ -350,7 +336,7 @@ plt.show()
 '''
 #surface construction
 ax = plt.axes(projection='3d')
-L=2
+L=2.2
 n=4
 k=15
 ray=0.2

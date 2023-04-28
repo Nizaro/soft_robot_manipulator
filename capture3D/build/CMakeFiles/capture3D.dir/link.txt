@@ -1,0 +1,1 @@
+/usr/bin/c++ -rdynamic CMakeFiles/capture3D.dir/capture3D.cpp.o -o capture3D  -lopencv_core -lopencv_imgcodecs -lopencv_imgproc -lopencv_highgui -lopencv_video -lopencv_videoio -lrealsense2 -lboost_system -lpcl_io 
