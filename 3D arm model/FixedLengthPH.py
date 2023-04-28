@@ -178,8 +178,10 @@ def FixedLengthPH(p0,p1,L,t):
     temp=np.linspace(0,1,101,dtype=complex)
     #i=0 #for debuging
     #r0=p0+((-temp*z0[i]+temp*z1[i]+z0[i])**3-z0[i]**3)/(3*(z1[i]-z0[i]))
+    t=(z0*(1-temp)+z1*temp)**2
+    print(t)
     r0=p0+((-temp*z0+temp*z1+z0)**3-z0**3)/(3*(z1-z0))
-    return z0,z1,r0
+    return z0,z1,r0,t  
 
 def PH3D(p0,p1,t0,L):
     
@@ -194,7 +196,7 @@ def PH3D(p0,p1,t0,L):
     n=np.cross(pa1,t0)/(A)
     alpha=np.arccos(np.dot(n,[0,0,1]))
     
-    r=np.cross(n,np.array([0,0,1]))/np.linalg.norm(np.cross(n,np.array([0,0,1]))) #seems to be the problem
+    r=np.cross(n,np.array([0,0,1]))/np.linalg.norm(np.cross(n,np.array([0,0,1]))) 
     R=Rot.from_rotvec(alpha*r)
     Rinv=R.inv()
     pb0=R.apply(pa0)
@@ -223,17 +225,37 @@ def PH3D(p0,p1,t0,L):
     t02D=tb0[0]+tb0[1]*1j
     
     #2D calculation
-    zb0,zb1,rb0=FixedLengthPH(p02D, p12D, L, t02D)
+    zb0,zb1,rb0,tb=FixedLengthPH(p02D, p12D, L, t02D)
     rb0=np.transpose(np.array([np.real(rb0),np.imag(rb0),np.zeros(rb0.size)]))
     zb0=np.array([np.real(zb0**2),np.imag(zb0**2),0])
     tb1=np.array([np.real(zb1**2),np.imag(zb1**2),0])
+    tb=np.array([np.real(tb),np.imag(tb),np.zeros(tb.size)])
+    rot=np.empty(101,dtype=rotation)
+    t=np.empty([3,101])
+    
+    
+    
     #rotation to initial reference
     r0=Rinv.apply(rb0)-offset
     z0=Rinv.apply(zb0)
     t1=Rinv.apply(tb1)
-
-    return(t1,r0)
     
+    #Rotation computation
+    axerot=np.cross(t0,t1)/np.linalg.norm(np.cross(t0,t1))
+    rot[0]=Rot.identity()
+    for i in range (101):
+        t[:,i]=Rinv.apply(tb[:,i])
+    for i in range(100):
+        alpha=np.arccos(np.dot(t0,t[:,i+1])/(np.linalg.norm(t0)*np.linalg.norm(t[:,i+1])))
+        print(alpha)
+        rotb=Rot.from_rotvec(alpha*axerot)
+        rot[i+1]=rotb
+
+    return(t1,r0,rot,t)
+    
+
+rotation=np.dtype(Rot)
+
 #Single segment interpolation
 '''
 L=2
@@ -268,6 +290,9 @@ p=np.empty([3,n+1])
 t=np.empty([3,n+1])
 x=np.empty([3,n+1])
 y=np.empty([3,n+1])
+Ex=np.array([1,0,0])
+Ey=np.array([0,1,0])
+Ez=np.array([0,0,1])
 x[:,0]=np.array([1,0,0])
 y[:,0]=np.array([0,1,0])
 t[:,0]=np.array([0,0,1])
@@ -278,7 +303,10 @@ p[:,2]=np.array([-0.6,0.5,3])
 p[:,3]=np.array([0,-0.8,3.8])
 p[:,4]=np.array([1,0.5,3.5])
 
-r=np.empty([101,3,n+1])
+r=np.empty([101,3,n])
+q=np.empty([101,n],dtype=rotation)
+Q=np.empty([101,n],dtype=rotation)
+
 
 color=['b','g','r','c','m','y','k']
 ax = plt.axes(projection='3d')
@@ -291,9 +319,10 @@ yv=np.array([p[:,0],p[:,0]+y[:,0]*0.3])
 ax.plot3D(zv[:,0],zv[:,1],zv[:,2],color=color[0])
 ax.plot3D(xv[:,0],xv[:,1],xv[:,2],color=color[1])
 ax.plot3D(yv[:,0],yv[:,1],yv[:,2],color=color[2])
-
+tang=np.array([3,101])
+Q1=Rot.identity()
 for i in range(n):
-    (t[:,i+1],r[:,:,i])=PH3D(p[:,i],p[:,i+1],t[:,i],L)
+    (t[:,i+1],r[:,:,i],q[:,i],tang)=PH3D(p[:,i],p[:,i+1],t[:,i],L)
     ax.plot3D(r[:,0,i],r[:,1,i],r[:,2,i],label='Solution')
     
     axerot=np.cross(t[:,i],t[:,i+1])/np.linalg.norm(np.cross(t[:,i],t[:,i+1]))
@@ -301,14 +330,27 @@ for i in range(n):
     rot=Rot.from_rotvec(alpha*axerot)
     x[:,i+1]=rot.apply(x[:,i])
     y[:,i+1]=rot.apply(y[:,i])
-    print(alpha)
-    zv=np.array([p[:,i+1],p[:,i+1]+t[:,i+1]*0.3/np.linalg.norm(t[:,i+1])])
-    xv=np.array([p[:,i+1],p[:,i+1]+x[:,i+1]*0.3])
-    yv=np.array([p[:,i+1],p[:,i+1]+y[:,i+1]*0.3])
+    zv=np.array([p[:,i+1],p[:,i+1]+t[:,i+1]*0.6/np.linalg.norm(t[:,i+1])])
+    xv=np.array([p[:,i+1],p[:,i+1]+x[:,i+1]*0.6])
+    yv=np.array([p[:,i+1],p[:,i+1]+y[:,i+1]*0.6])
+    #ax.plot3D(zv[:,0],zv[:,1],zv[:,2],color=color[0])
+    #ax.plot3D(xv[:,0],xv[:,1],xv[:,2],color=color[1])
+    #ax.plot3D(yv[:,0],yv[:,1],yv[:,2],color=color[2])
     
-    ax.plot3D(zv[:,0],zv[:,1],zv[:,2],color=color[0])
-    ax.plot3D(xv[:,0],xv[:,1],xv[:,2],color=color[1])
-    ax.plot3D(yv[:,0],yv[:,1],yv[:,2],color=color[2])
+    for j in range(101):
+        Q[j,i]=q[j,i]*Q1
+        Qx=Q[j,i].apply(Ex)
+        Qy=Q[j,i].apply(Ey)
+        Qz=Q[j,i].apply(Ez)
+        if j%10==0:
+            Qxv=np.array([r[j,:,i],r[j,:,i]+Qx/3])
+            Qyv=np.array([r[j,:,i],r[j,:,i]+Qy/3])
+            Qzv=np.array([r[j,:,i],r[j,:,i]+Qz/3])
+            ax.plot3D(Qxv[:,0],Qxv[:,1],Qxv[:,2],color=color[1])
+            ax.plot3D(Qyv[:,0],Qyv[:,1],Qyv[:,2],color=color[2])
+            #ax.plot3D(Qzv[:,0],Qzv[:,1],Qzv[:,2],color=color[0])
+    Q1=Q[100,i]
+
 
 # (t1,r0)=PH3D(p0,p1,t0,L)
 # tv=np.array([p0,p0+t0])
