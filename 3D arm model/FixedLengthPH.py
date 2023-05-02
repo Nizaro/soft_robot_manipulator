@@ -254,6 +254,45 @@ def MultiPH3D(p,L):
     return r,Q
 rotation=np.dtype(Rot)
 
+def SmoothConstruct(p,L,k,ray):
+    Ex=np.array([1,0,0])
+    Ey=np.array([0,1,0])
+    Ez=np.array([0,0,1])
+    n=(p.size//3)-1
+    S=np.empty([3,101,n,k])
+    rn=np.empty([3,k])
+    (r,Q)=MultiPH3D(p,L)
+    
+    for i in range(k):
+        rn[:,i]=ray*np.cos(np.pi*2*i/k)*Ex+ray*np.sin(np.pi*2*i/k)*Ey
+        for j in range(n):
+            for m in range(101):
+                S[:,m,j,i]=r[m,:,j]+Q[m,j].apply(rn[:,i])
+                
+    
+    return S
+
+def SegmentedConstruct(p,L,k,ray,nb):
+    Ex=np.array([1,0,0])
+    Ey=np.array([0,1,0])
+    Ez=np.array([0,0,1])
+    n=(p.size//3)-1
+    S=np.empty([3,101,n,k])
+    rn=np.empty([3,k])
+    (r,Q)=MultiPH3D(p,L)
+    leng=100//nb
+    print(leng)
+    for i in range(k):
+        rn[:,i]=ray*np.cos(np.pi*2*i/k)*Ex+ray*np.sin(np.pi*2*i/k)*Ey
+        for j in range(n):
+            for l in range(nb) :
+                P1=Q[l*leng,j].apply(rn[:,i])+r[l*leng,:,j]
+                P2=Q[(l+1)*leng,j].apply(rn[:,i])+r[(l+1)*leng,:,j]
+                for m in range(leng+1):
+                    S[:,l*leng+m,j,i]=(P1*(leng-m)/leng)+(P2*m/leng)
+    
+    return S
+
 #Single segment interpolation
 '''
 L=2
@@ -336,9 +375,9 @@ plt.show()
 '''
 #surface construction
 ax = plt.axes(projection='3d')
-L=2.2
+L=2
 n=4
-k=15
+k=10
 ray=0.2
 p=np.empty([3,n+1])
 t=np.empty([3,n+1])
@@ -356,17 +395,13 @@ p[:,1]=np.array([0.5,0.7,1.7])
 p[:,2]=np.array([-0.6,0.5,3])
 p[:,3]=np.array([0,-0.8,3.8])
 p[:,4]=np.array([1,0.5,3.5])
-(r,Q)=MultiPH3D(p,L)
-S=np.empty([3,101,n,k])
-rn=np.empty([3,k])
+S1=SmoothConstruct(p, L, k, ray)
+S2=SegmentedConstruct(p, L, k, ray,5)
+    
 for i in range(k):
-    rn[:,i]=ray*np.cos(np.pi*2*i/k)*Ex+ray*np.sin(np.pi*2*i/k)*Ey
     for j in range(n):
-        for m in range(101):
-            S[:,m,j,i]=r[m,:,j]+Q[m,j].apply(rn[:,i])
-            print(S[:,m,j,i])
-        ax.plot3D(S[0,:,j,i],S[1,:,j,i],S[2,:,j,i],color='b')
-        
+        #ax.plot3D(S1[0,:,j,i],S1[1,:,j,i],S1[2,:,j,i],color='b')
+        ax.plot3D(S2[0,:,j,i],S2[1,:,j,i],S2[2,:,j,i],color='r',linestyle='-')
 ax.set_xlabel('x')
 ax.set_ylabel('y')
 ax.set_zlabel('z')

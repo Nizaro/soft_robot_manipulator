@@ -8,7 +8,7 @@ set (prg_name "capture3D")
 
 
 add_executable(${prg_name} capture3D.cpp)
-set_property(TARGET ${prg_name} PROPERTY CXX_STANDARD 11)
+set_property(TARGET ${prg_name} PROPERTY CXX_STANDARD 14)
 target_link_libraries(${prg_name} 
 	
     	-lopencv_core

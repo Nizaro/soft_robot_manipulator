@@ -6,5 +6,5 @@ CXX_DEFINES =
 
 CXX_INCLUDES = -I/usr/include/pcl-1.12 -I/usr/include/eigen3 -I/usr/local/include/opencv4
 
-CXX_FLAGS = -O3 -Wno-deprecated -std=c++14 `pkg-config --libs opencv`  -std=gnu++11
+CXX_FLAGS = -O3 -Wno-deprecated -std=c++14 `pkg-config --libs opencv`  -std=gnu++14
 
