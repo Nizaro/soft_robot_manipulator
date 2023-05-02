@@ -376,9 +376,9 @@ plt.show()
 #surface construction
 ax = plt.axes(projection='3d')
 L=2
-n=4
-k=10
-ray=0.2
+n=3
+k=30
+ray=0.25
 p=np.empty([3,n+1])
 t=np.empty([3,n+1])
 x=np.empty([3,n+1])
@@ -394,14 +394,21 @@ p[:,0]=np.array([0,0,0])
 p[:,1]=np.array([0.5,0.7,1.7])
 p[:,2]=np.array([-0.6,0.5,3])
 p[:,3]=np.array([0,-0.8,3.8])
-p[:,4]=np.array([1,0.5,3.5])
+#p[:,4]=np.array([1,0.5,3.5])
 S1=SmoothConstruct(p, L, k, ray)
-S2=SegmentedConstruct(p, L, k, ray,5)
-    
+S2=SegmentedConstruct(p, L, k, ray,4)
+'''   
 for i in range(k):
     for j in range(n):
-        #ax.plot3D(S1[0,:,j,i],S1[1,:,j,i],S1[2,:,j,i],color='b')
-        ax.plot3D(S2[0,:,j,i],S2[1,:,j,i],S2[2,:,j,i],color='r',linestyle='-')
+        #
+        #ax.plot3D(S2[0,:,j,i],S2[1,:,j,i],S2[2,:,j,i],color='r',linestyle='-')
+        
+'''      
+for j in range(n):
+    for l in range(20):
+        #ax.plot3D(S1[0,l*5,j,:],S1[1,l*5,j,:],S1[2,l*5,j,:],color='b',linestyle='-')
+        ax.plot3D(S2[0,l*5,j,:],S2[1,l*5,j,:],S2[2,l*5,j,:],color='r',linestyle='-')
+
 ax.set_xlabel('x')
 ax.set_ylabel('y')
 ax.set_zlabel('z')
