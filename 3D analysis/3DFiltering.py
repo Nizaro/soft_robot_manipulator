@@ -1,8 +1,67 @@
 import numpy as np
 import open3d as o3d
 from scipy import stats
+from pyransac.base import Model
+from pyransac import ransac
 import pyransac
 from scipy.spatial.transform import Rotation as rot
+import random
+
+class CylModel(Model):
+    def __init__(self, direction=None, center=None,radius=None):
+        self.direction=direction
+        self.center=center
+        self.radius=radius
+        
+    def make_model(self, P1N):
+        
+        P2N=P1N[1]
+        P3N=P1N[2]
+        P1N=P1N[0]
+        P1=np.array(P1N[0])
+        P2=np.array(P2N[0])
+        P3=np.array(P3N[0])
+        N1=np.array(P1N[1])
+        N2=np.array(P2N[1])
+
+        # Cylinder direction computed from normals
+        D=np.cross(N1,N2)/np.linalg.norm(np.cross(N1,N2))
+
+
+        #Coordinate change to the orthogonal plane
+        alpha=np.arccos(np.dot(D,[0,0,1]))
+         
+        r=np.cross(D,np.array([0,0,1]))/np.linalg.norm(np.cross(D,np.array([0,0,1]))) 
+        R=rot.from_rotvec(alpha*r)
+        Rinv=R.inv()
+        P1plane=R.apply(P1)
+        P2plane=R.apply(P2)
+        P3plane=R.apply(P3)
+        P1c=P1plane[0]+P1plane[1]*1j
+        P2c=P2plane[0]+P2plane[1]*1j
+        P3c=P3plane[0]+P3plane[1]*1j
+
+
+        #Computation of center and radius
+        w=(P3c-P1c)/(P2c-P1c)
+        Cc=((P2c-P1c)*(w-abs(w)**2)/(2j*w.imag))+P1c
+        R= abs(P2c - Cc)
+        Cplane=np.array([np.real(Cc),np.imag(Cc),0])
+
+        C=Rinv.apply(Cplane)
+
+        Cproj=-np.dot(C,D)*D+C
+        
+        self.direction=D
+        self.center=C
+        self.radius=R
+        return
+    
+    def calc_error(self, point):
+        err=np.linalg.norm(np.cross(np.array(point[0])-self.center,self.direction))-self.radius
+        err=np.abs(err)
+        return err
+
 
 
 def findCyl(P1N,P2N,P3N):
@@ -111,9 +170,36 @@ P1N=np.array([P1,N1])
 P2N=np.array([P2,N2])
 P3N=np.array([P3,N3])
 
+Mymodel=CylModel()
+'''
+Mymodel.make_model(P1N, P2N, P3N)
+D=Mymodel.direction
+C=Mymodel.center
+R=Mymodel.radius
+'''
+PN=np.array([points,normals])
+PN=np.swapaxes(PN,0,1)
+PNL=np.ndarray.tolist(PN)
+#(D,C,R)=findCyl(P1N, P2N, P3N)
+
+params=ransac.RansacParams(samples=3, iterations=1000, confidence=0.9, threshold=0.001)
+
+A=random.choices(PNL, k=3)
+A1=A[0]
+A1X=A1[0][0]
 
 
-(D,C,R)=findCyl(P1N, P2N, P3N)
+Inliers=pyransac.find_inliers(PNL, Mymodel, params)
+Inliers=np.array(Inliers)
+Inliers=Inliers[:,0,:]
+Inliers=np.ndarray.tolist(Inliers)
+pcdInliers=o3d.geometry.PointCloud()
+pcdInliers.points=o3d.utility.Vector3dVector(Inliers)
+D=Mymodel.direction
+C=Mymodel.center
+R=Mymodel.radius
+
+
 alpha=np.arccos(np.dot(D,[0,0,1]))
  
 r=np.cross(D,np.array([0,0,1]))/np.linalg.norm(np.cross(D,np.array([0,0,1]))) 
@@ -138,4 +224,5 @@ pcd3=o3d.geometry.PointCloud()
 pcd3.points = o3d.utility.Vector3dVector([P1,P2,P3])
 pcd3.paint_uniform_color([0,1,0])
 pcd4=o3d.geometry.PointCloud()
-o3d.visualization.draw_geometries([pcd3,Cylinder,line_set])
+#o3d.visualization.draw_geometries([Cylinder,pcdInliers])
+o3d.visualization.draw_geometries([pcd1,pcdInliers])
