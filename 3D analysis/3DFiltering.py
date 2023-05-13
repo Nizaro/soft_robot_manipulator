@@ -26,14 +26,22 @@ class CylModel(Model):
         N2=np.array(P2N[1])
 
         # Cylinder direction computed from normals
-        D=np.cross(N1,N2)/np.linalg.norm(np.cross(N1,N2))
+        D=np.cross(N1,N2)
+        if np.linalg.norm(np.cross(N1,N2))==0:
+            D=np.array([0,0,1])
+        else:
+            D=np.cross(N1,N2)/np.linalg.norm(np.cross(N1,N2))
+            D=D*np.sign(D[2])
 
 
-        #Coordinate change to the orthogonal plane
+        #Coordinate change to the orthogonal plane of D
         alpha=np.arccos(np.dot(D,[0,0,1]))
          
         r=np.cross(D,np.array([0,0,1]))/np.linalg.norm(np.cross(D,np.array([0,0,1]))) 
-        R=rot.from_rotvec(alpha*r)
+        if np.linalg.norm(alpha*r)==0:
+            R=rot.from_quat([[1,0,0,0]])
+        else :
+            R=rot.from_rotvec(alpha*r)
         Rinv=R.inv()
         P1plane=R.apply(P1)
         P2plane=R.apply(P2)
@@ -72,7 +80,6 @@ class RCylModel(Model):
         R=0.022
         
         P2N=P1N[1]
-        P3N=P1N[2]
         P1N=P1N[0]
         P1=np.array(P1N[0])
         P2=np.array(P2N[0])
@@ -80,14 +87,22 @@ class RCylModel(Model):
         N2=np.array(P2N[1])
 
         # Cylinder direction computed from normals
-        D=np.cross(N1,N2)/np.linalg.norm(np.cross(N1,N2))
+        D=np.cross(N1,N2)
+        if np.linalg.norm(np.cross(N1,N2))==0:
+            D=np.array([0,0,1])
+        else:
+            D=np.cross(N1,N2)/np.linalg.norm(np.cross(N1,N2))
+            D=D*np.sign(D[2])
 
 
-        #Coordinate change to the orthogonal plane
+        #Coordinate change to the orthogonal plane of D
         alpha=np.arccos(np.dot(D,[0,0,1]))
          
         r=np.cross(D,np.array([0,0,1]))/np.linalg.norm(np.cross(D,np.array([0,0,1]))) 
-        Rota=rot.from_rotvec(alpha*r)
+        if np.linalg.norm(alpha*r)==0:
+            Rota=rot.from_quat([[1,0,0,0]])
+        else :
+            Rota=rot.from_rotvec(alpha*r)
         Rinv=Rota.inv()
         P1plane=Rota.apply(P1)
         P2plane=Rota.apply(P2)
@@ -157,8 +172,45 @@ def findLine(pcd1):
     
     return center, D3
 
+def CylinderDipslay(Bestmodel,pcdInliers):
+    
+    #Parameter retrieaval
+    D=Bestmodel.direction
+    C=Bestmodel.center
+    R=Bestmodel.radius
 
-#Data acquisition
+    alpha=np.arccos(np.dot([0,0,1],D))
+    r=np.cross(np.array([0,0,1]),D)/np.linalg.norm(np.cross(np.array([0,0,1]),D)) 
+    Rot=rot.from_rotvec(alpha*r)
+    Rinv=Rot.inv()
+
+    #Center point recomputing
+    pcdDir=copy.deepcopy(pcdInliers)
+    #pcdDir.translate(-C/2)
+    #pcdDir.rotate(Rinv.as_matrix())
+    pointDir=np.asarray(pcdDir.points)
+    pointDir=Rinv.apply(pcdDir.points)
+
+    Max=max(pointDir[:,2])
+    Min=min(pointDir[:,2])
+
+    H=np.abs(Max-Min)
+    center=((Max+Min)/2)
+    #center=np.array([0,0,center])
+
+    #center=Rot.apply(center)
+    C=C+center*D
+
+
+    #Cylinder display
+    Cylinder=o3d.geometry.TriangleMesh.create_cylinder(radius=R, height=H,split=10)
+    Cylinder=Cylinder.rotate(Rot.as_matrix())
+    Cylinder=Cylinder.translate(C)
+    Cylinder=o3d.geometry.LineSet.create_from_triangle_mesh(Cylinder)
+    
+    return Cylinder
+
+#Data acquisition ============================================================
 pcd0 = o3d.io.read_point_cloud("data_23-05-04_14-56-00/pc1.ply")
 pcd1 = filterDATA(pcd0)
 normal_param=o3d.geometry.KDTreeSearchParamRadius(0.005)
@@ -171,10 +223,11 @@ PN=np.array([points,normals])
 PN=np.swapaxes(PN,0,1)
 PNL=np.ndarray.tolist(PN)
 
+#here you can choose between fixed (RCylModel()) and variable (CylModel()) radius for the cylinder research
 Mymodel=RCylModel()
 Bestmodel=RCylModel()
 
-###least squares line
+###least squares line=========================================================
 '''
 (center, D3)=findLine(pcd1)
 
@@ -195,7 +248,7 @@ line_set.lines = o3d.utility.Vector2iVector(line)
 o3d.visualization.draw_geometries([pcd1])
 '''
 
-### 3 cylinder point demonstration
+### 3 cylinder point demonstration ===========================================
 '''
 #input points 
 P1=points[1000,:]
@@ -237,59 +290,30 @@ Cylinder=o3d.geometry.LineSet.create_from_triangle_mesh(Cylinder)
 o3d.visualization.draw_geometries([Cylinder,pcd3,line_set])
 '''
 
-###Actual ransac
+###Actual ransac =============================================================
 
 #Ransac parameters
-params=ransac.RansacParams(samples=3, iterations=1000, confidence=0.999, threshold=0.008)
+params=ransac.RansacParams(samples=3, iterations=1000, confidence=0.99999, threshold=0.002)
 #Ransac application
+
 Inliers,Bestmodel=pyransac.find_inliers(PNL, Mymodel, params)
-#Data retrieval
+#Inlier reformatting
 Inliers=np.array(Inliers)
 Inliers=Inliers[:,0,:]
 Inliers=np.ndarray.tolist(Inliers)
 pcdInliers=o3d.geometry.PointCloud()
 pcdInliers.points=o3d.utility.Vector3dVector(Inliers)
 pcdInliers.paint_uniform_color([1,0,0])
-#cylinder generation
 
-D=Bestmodel.direction
-alpha=np.arccos(np.dot([0,0,1],D))
-r=np.cross(np.array([0,0,1]),D)/np.linalg.norm(np.cross(np.array([0,0,1]),D)) 
-Rot=rot.from_rotvec(alpha*r)
-Rinv=Rot.inv()
-pcdDir=copy.deepcopy(pcdInliers)
-pcdDir.rotate(Rinv.as_matrix())
-pointDir=np.asarray(pcdDir.points)
-Max=pcdDir.select_by_index(np.where(pointDir[:,2] ==max(pointDir[:,2])))
-Max=np.asarray(Max.points)
-Max=Max[0,:]
+Cylinder=CylinderDipslay(Bestmodel,pcdInliers)
 
-Min=pcdDir.select_by_index(np.where(pointDir[:,2] ==min(pointDir[:,2])))
-Min=np.asarray(Min.points)
-Min=Min[0,:]
-
-center=(Max+Min)/2
-print(center)
-center=Rot.apply(center)
-
-C=Bestmodel.center
-C=C+np.dot((center-C),D)*D
 R=Bestmodel.radius
-
-
-
-Cylinder=o3d.geometry.TriangleMesh.create_cylinder(radius=R, height=0.5,split=10)
-Cylinder=Cylinder.translate(C)
-Cylinder=Cylinder.rotate(Rot.as_matrix())
-
-Cylinder=o3d.geometry.LineSet.create_from_triangle_mesh(Cylinder)
-
 #Display
-o3d.visualization.draw_geometries([pcd0,Cylinder,pcd1,pcdInliers])
+o3d.visualization.draw_geometries([Cylinder,pcdInliers,pcd1])
 #o3d.visualization.draw_geometries([pcd1,pcdInliers])
 
 
-###space partition
+###space partition ===========================================================
 '''
 grid=o3d.geometry.VoxelGrid()
 grid=grid.create_from_point_cloud(pcd1,0.5)

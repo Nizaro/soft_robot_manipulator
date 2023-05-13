@@ -48,8 +48,10 @@ def find_inliers(points: List, model: Model, params: RansacParams):
     max_support = 0
     iterations = params.iterations
     i = 0
+    ratio=0
 
     while i < iterations:
+        
         sample_points = random.choices(points, k=params.samples)
         model.make_model(sample_points)
         supporters = _find_supporters(points, model, params.threshold)
@@ -70,6 +72,7 @@ def find_inliers(points: List, model: Model, params: RansacParams):
             iterations = log(confidence) / log(1 - ratio ** params.samples)
             
 
+        print('iteration:',i,'/',iterations,'Ratio:',ratio)
         i += 1
 
     return inliers, best_model
