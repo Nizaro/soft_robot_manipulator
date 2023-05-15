@@ -214,7 +214,7 @@ def CylinderDipslay(Bestmodel,pcdInliers):
     return Cylinder
 
 #Data acquisition ============================================================
-pcd0 = o3d.io.read_point_cloud("data_23-05-04_14-56-00/pc3.ply")
+pcd0 = o3d.io.read_point_cloud("data_23-05-04_14-56-00/pc1.ply")
 pcd1 = filterDATA(pcd0)
 normal_param=o3d.geometry.KDTreeSearchParamRadius(0.005)
 pcd1.estimate_normals()
@@ -317,16 +317,11 @@ o3d.visualization.draw_geometries([Cylinder,pcdInliers,pcd1])
 '''
 
 ###space partition ===========================================================
-params=ransac.RansacParams(samples=3, iterations=1000, confidence=0.999, threshold=0.003)
-densit_threshold=400
+params=ransac.RansacParams(samples=3, iterations=1000, confidence=0.99999, threshold=0.0005)
+densit_threshold=1200
 
-color=[[1,0,0],
-       [0,1,0],
-       [0,0,1],
-       [1,1,0],
-       [1,0,1],
-       [0,0,0],]
-size=0.15
+size=0.04
+densit_threshold*=size
 grid=o3d.geometry.VoxelGrid()
 grid=grid.create_from_point_cloud(pcd1,voxel_size=size)
 disp_grid=o3d.geometry.TriangleMesh()
@@ -375,11 +370,12 @@ for i in range(len(voxels)):
     Z=pointsi[:,2]
     pcdi = pcdi.select_by_index(np.where(Z > (center[2]-(size/2)))[0])
     pointsi=np.asarray(pcdi.points)
-    pcdi.paint_uniform_color([random.random(),random.random(),random.random()])
+    color=[random.random(),random.random(),random.random()]
+    pcdi.paint_uniform_color(color)
     pcdVox.append(pcdi)
     print(i,':',len(pcdi.points))
-    if len(pcdi.points) > densit_threshold:
-        print('voxel ',i,' computed')
+    if len(pcdi.points) > np.abs(densit_threshold/center[2]):
+        print('voxel ',i,' computation for ',len(pcdi.points),' points limit :',densit_threshold/center[2])
         normalsi=np.asarray(pcdi.normals)
         PN=np.array([pointsi,normalsi])
         PN=np.swapaxes(PN,0,1)
@@ -395,11 +391,12 @@ for i in range(len(voxels)):
         pcdInliers.points=o3d.utility.Vector3dVector(Inliers)
         pcdInliers.paint_uniform_color([1,0,0])
         Cylinderi=CylinderDipslay(Bestmodel,pcdInliers)
+        Cylinderi.paint_uniform_color(color)
         Cylinder.append(Cylinderi)
     else:
-        print('voxel ',i,' skipped')
+        print('voxel ',i,' skipped',len(pcdi.points),' points limit :',densit_threshold/center[2])
     
     
 #disp_grid=o3d.geometry.LineSet.create_from_triangle_mesh(disp_grid)
-o3d.visualization.draw_geometries([pcd1]+Cylinder)
+o3d.visualization.draw_geometries(pcdVox+Cylinder)
 
