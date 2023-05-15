@@ -5,7 +5,7 @@ from pyransac import ransac
 import pyransac
 import copy
 from scipy.spatial.transform import Rotation as rot
-
+import random
 
 ### Cylinder Model
 class CylModel(Model):
@@ -38,10 +38,12 @@ class CylModel(Model):
         alpha=np.arccos(np.dot(D,[0,0,1]))
          
         r=np.cross(D,np.array([0,0,1]))/np.linalg.norm(np.cross(D,np.array([0,0,1]))) 
-        if np.linalg.norm(alpha*r)==0:
-            R=rot.from_quat([[1,0,0,0]])
+        if np.isnan(r).any()==True:
+            R=rot.from_quat([1,0,0,0])
+            Rinv=rot.from_quat([1,0,0,0])
         else :
             R=rot.from_rotvec(alpha*r)
+            Rinv=R.inv()
         Rinv=R.inv()
         P1plane=R.apply(P1)
         P2plane=R.apply(P2)
@@ -98,12 +100,13 @@ class RCylModel(Model):
         #Coordinate change to the orthogonal plane of D
         alpha=np.arccos(np.dot(D,[0,0,1]))
          
-        r=np.cross(D,np.array([0,0,1]))/np.linalg.norm(np.cross(D,np.array([0,0,1]))) 
-        if np.linalg.norm(alpha*r)==0:
-            Rota=rot.from_quat([[1,0,0,0]])
+        r=np.cross(D,np.array([0,0,1]))/np.linalg.norm(np.cross(D,np.array([0,0,1])))
+        if np.isnan(r).any()==True:
+            Rota=rot.from_quat([1,0,0,0])
+            Rinv=rot.from_quat([1,0,0,0])
         else :
             Rota=rot.from_rotvec(alpha*r)
-        Rinv=Rota.inv()
+            Rinv=Rota.inv()
         P1plane=Rota.apply(P1)
         P2plane=Rota.apply(P2)
         N1plane=Rota.apply(N1)
@@ -211,7 +214,7 @@ def CylinderDipslay(Bestmodel,pcdInliers):
     return Cylinder
 
 #Data acquisition ============================================================
-pcd0 = o3d.io.read_point_cloud("data_23-05-04_14-56-00/pc1.ply")
+pcd0 = o3d.io.read_point_cloud("data_23-05-04_14-56-00/pc3.ply")
 pcd1 = filterDATA(pcd0)
 normal_param=o3d.geometry.KDTreeSearchParamRadius(0.005)
 pcd1.estimate_normals()
@@ -291,9 +294,9 @@ o3d.visualization.draw_geometries([Cylinder,pcd3,line_set])
 '''
 
 ###Actual ransac =============================================================
-
+'''
 #Ransac parameters
-params=ransac.RansacParams(samples=3, iterations=1000, confidence=0.99999, threshold=0.002)
+params=ransac.RansacParams(samples=3, iterations=1000, confidence=0.99999, threshold=0.003)
 #Ransac application
 
 Inliers,Bestmodel=pyransac.find_inliers(PNL, Mymodel, params)
@@ -311,14 +314,92 @@ R=Bestmodel.radius
 #Display
 o3d.visualization.draw_geometries([Cylinder,pcdInliers,pcd1])
 #o3d.visualization.draw_geometries([pcd1,pcdInliers])
-
+'''
 
 ###space partition ===========================================================
-'''
+params=ransac.RansacParams(samples=3, iterations=1000, confidence=0.999, threshold=0.003)
+densit_threshold=400
+
+color=[[1,0,0],
+       [0,1,0],
+       [0,0,1],
+       [1,1,0],
+       [1,0,1],
+       [0,0,0],]
+size=0.15
 grid=o3d.geometry.VoxelGrid()
-grid=grid.create_from_point_cloud(pcd1,0.5)
+grid=grid.create_from_point_cloud(pcd1,voxel_size=size)
 disp_grid=o3d.geometry.TriangleMesh()
 disp_grid=grid.TriangleMesh
+voxels=np.asarray(grid.get_voxels())
+X=points[:,0]
+Y=points[:,1]
+Z=points[:,2]
+i=0
+pcdVox=[]
+Cylinder=[]
+print(len(voxels))
+for i in range(len(voxels)):
+    pcdi=o3d.geometry.PointCloud()
+    index = voxels[i].grid_index
+    center = grid.get_voxel_center_coordinate(index)
+    print(center)
+    pcdi=copy.deepcopy(pcd1)
+    X=points[:,0]
+    Y=points[:,1]
+    Z=points[:,2]
+    pcdi = pcdi.select_by_index(np.where(X < (center[0]+(size/2)))[0])
+    pointsi=np.asarray(pcdi.points)
+    X=pointsi[:,0]
+    Y=pointsi[:,1]
+    Z=pointsi[:,2]
+    pcdi = pcdi.select_by_index(np.where(X > (center[0]-(size/2)))[0])
+    pointsi=np.asarray(pcdi.points)
+    X=pointsi[:,0]
+    Y=pointsi[:,1]
+    Z=pointsi[:,2]
+    pcdi = pcdi.select_by_index(np.where(Y < (center[1]+(size/2)))[0]) 
+    pointsi=np.asarray(pcdi.points)
+    X=pointsi[:,0]
+    Y=pointsi[:,1]
+    Z=pointsi[:,2]
+    pcdi = pcdi.select_by_index(np.where(Y > (center[1]-(size/2)))[0])
+    pointsi=np.asarray(pcdi.points)
+    X=pointsi[:,0]
+    Y=pointsi[:,1]
+    Z=pointsi[:,2]
+    pcdi = pcdi.select_by_index(np.where(Z < (center[2]+(size/2)))[0])
+    pointsi=np.asarray(pcdi.points)
+    X=pointsi[:,0]
+    Y=pointsi[:,1]
+    Z=pointsi[:,2]
+    pcdi = pcdi.select_by_index(np.where(Z > (center[2]-(size/2)))[0])
+    pointsi=np.asarray(pcdi.points)
+    pcdi.paint_uniform_color([random.random(),random.random(),random.random()])
+    pcdVox.append(pcdi)
+    print(i,':',len(pcdi.points))
+    if len(pcdi.points) > densit_threshold:
+        print('voxel ',i,' computed')
+        normalsi=np.asarray(pcdi.normals)
+        PN=np.array([pointsi,normalsi])
+        PN=np.swapaxes(PN,0,1)
+        PNL=np.ndarray.tolist(PN)
+        
+        
+        Inliers,Bestmodel=pyransac.find_inliers(PNL, Mymodel, params)
+        #Inlier reformatting
+        Inliers=np.array(Inliers)
+        Inliers=Inliers[:,0,:]
+        Inliers=np.ndarray.tolist(Inliers)
+        pcdInliers=o3d.geometry.PointCloud()
+        pcdInliers.points=o3d.utility.Vector3dVector(Inliers)
+        pcdInliers.paint_uniform_color([1,0,0])
+        Cylinderi=CylinderDipslay(Bestmodel,pcdInliers)
+        Cylinder.append(Cylinderi)
+    else:
+        print('voxel ',i,' skipped')
+    
+    
 #disp_grid=o3d.geometry.LineSet.create_from_triangle_mesh(disp_grid)
-o3d.visualization.draw_geometries([pcd0,grid])
-'''
+o3d.visualization.draw_geometries([pcd1]+Cylinder)
+
