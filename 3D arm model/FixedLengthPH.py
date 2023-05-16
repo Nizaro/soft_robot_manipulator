@@ -12,6 +12,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import fsolve
 from scipy.spatial.transform import Rotation as Rot
+import random
 
 #First equation to solve to find satisfying PH curves
 def PHA(x,a,c,k):
@@ -233,7 +234,35 @@ def PH3D(p0,p1,t0,L):
         rot[i+1]=rotb
 
     return(t1,r0,rot)
+
+def PCC3D(p1,p2,Q):
+    Sn=np.array([100,3])
+    r=np.linalg.norm(p2-p1)
+    Sn=np.empty([100,3])
+    ctheta=np.dot((p2-p1),Q.apply([0,0,1]))/np.linalg.norm(p2-p1)
+    theta=np.arccos(ctheta)
+    L=r*theta/np.sin(theta)
+    rho=L/(2*theta)
+    rotvec=-np.cross(Q.apply([0,0,1]),(p2-p1))/np.linalg.norm(np.cross(Q.apply([0,0,1]),(p2-p1)))
+    rot=Rot.from_rotvec(theta*rotvec)
+    O=rho*np.cross(Q.apply([0,0,1]),rotvec)
+    for i in range(100):
+        thetai=theta*i/(99)
+        roti=Rot.from_rotvec((-thetai*2)*rotvec)
+        Sn[i,:]=p1+O-roti.apply(O)
+        
     
+    
+    return Sn
+    
+def MultiPCC3D(P,Q):
+    n=np.size(P)//3
+    S=np.empty([100,3,n])
+    for i in range(n-1):
+        S[:,:,i]=PCC3D(P[i],P[i+1],Q[i])
+
+    return S,Q
+
 def MultiPH3D(p,L):
     n=p.size//3
     r=np.empty([101,3,n])
@@ -293,7 +322,64 @@ def SegmentedConstruct(p,L,k,ray,nb):
     
     return S
 
-#Single segment interpolation
+def SegmentedConstruct2(p,L,k,ray,Q):
+    Ex=np.array([1,0,0])
+    Ey=np.array([0,1,0])
+    Ez=np.array([0,0,1])
+    n=(p.size//3)-1
+    S=np.empty([3,101,n,k])
+    rn=np.empty([3,k])
+    (r,Q)=MultiPCC3D(p,Q)
+    for i in range(k):
+        rn[:,i]=ray*np.cos(np.pi*2*i/k)*Ex+ray*np.sin(np.pi*2*i/k)*Ey
+        for j in range(n):
+            P1=Q[j].apply(rn[:,i])+r[0,:,j]
+            P2=Q[j+1].apply(rn[:,i])+r[99,:,j]
+            for m in range(99+1):
+                S[:,m,j,i]=(P1*(99-m)/99)+(P2*m/99)
+    
+    return S
+
+def PCCrandom(N,L,rep):
+    theta=np.empty([N])
+    phi=np.empty([N])
+    r=np.empty([N])
+    for i in range(N//rep):
+        theta[rep*i]=random.random()*np.pi/5
+        phi[rep*i]=random.random()*2*np.pi
+        r[rep*i]=L*np.sin(theta[i])/theta[i]
+        for j in range(rep-1):
+            theta[rep*i+j+1]=theta[rep*i]
+            phi[rep*i+j+1]=phi[rep*i]
+            r[rep*i+j+1]=r[rep*i]    
+    
+    return phi,theta,r
+
+def General_Construct(phi,theta,r):
+    p=np.empty([len(phi)+1,3])
+    P=np.empty([len(phi)+1,3])
+    q=np.empty([len(phi)+1],dtype=rotation)
+    Q=np.empty([len(phi)+1],dtype=rotation)
+    
+
+    p[0,:]=np.array([0,0,0])
+    P[0,:]=np.array([0,0,0])
+    q[0]=Rot.from_quat([0,0,0,1])
+    Q[0]=Rot.from_quat([0,0,0,1])
+    for i in range(len(phi)):
+        a=Rot.from_euler('ZYX',[phi[i],theta[i],0])
+        V=a.apply([0,0,1])
+        rotvec=np.cross([0,0,1],V)/np.linalg.norm(np.cross([0,0,1],V))
+        q[i+1]=Rot.from_rotvec(2*theta[i]*rotvec)
+        #q[i+1]=Rot.from_euler('ZYX',[phi[i],2*theta[i],0])
+        p[i+1,:]=r[i]*a.apply([0,0,1])
+        Q[i+1]=Q[i]*q[i+1]
+        P[i+1,:]=P[i,:]+Q[i].apply(p[i+1,:])   
+    return P,Q
+
+
+
+###Single segment interpolation ===============================================
 '''
 L=2
 p0=np.array([1,0,0])
@@ -319,7 +405,7 @@ ax.legend(loc='upper left')
 ax.set_aspect('equal')
 plt.show()
 '''
-#Multi-segment interpolation
+### Multi-segment interpolation ===============================================
 '''
 L=2
 n=4
@@ -373,7 +459,8 @@ ax.set_aspect('equal')
 
 plt.show()
 '''
-#surface construction
+###surface construction =======================================================
+'''
 ax = plt.axes(projection='3d')
 L=2
 n=3
@@ -397,13 +484,6 @@ p[:,3]=np.array([0,-0.8,3.8])
 #p[:,4]=np.array([1,0.5,3.5])
 S1=SmoothConstruct(p, L, k, ray)
 S2=SegmentedConstruct(p, L, k, ray,4)
-'''   
-for i in range(k):
-    for j in range(n):
-        #
-        #ax.plot3D(S2[0,:,j,i],S2[1,:,j,i],S2[2,:,j,i],color='r',linestyle='-')
-        
-'''      
 for j in range(n):
     for l in range(20):
         #ax.plot3D(S1[0,l*5,j,:],S1[1,l*5,j,:],S1[2,l*5,j,:],color='b',linestyle='-')
@@ -414,3 +494,30 @@ ax.set_ylabel('y')
 ax.set_zlabel('z')
 ax.set_aspect('equal')
 plt.show()       
+'''
+k=30
+ray=0.27
+N=12
+L=0.5
+rep=4
+phi,theta,r=PCCrandom(N, L,rep)
+P,Q=General_Construct(phi, theta, r)
+S,Q=MultiPCC3D(P, Q)
+S2=SegmentedConstruct2(P, L, k, ray,Q)
+
+
+ax = plt.axes(projection='3d')
+for j in range(N):
+    for l in range(20):
+        #ax.plot3D(S1[0,l*5,j,:],S1[1,l*5,j,:],S1[2,l*5,j,:],color='b',linestyle='-')
+        ax.plot3D(S2[0,l*5,j,:],S2[1,l*5,j,:],S2[2,l*5,j,:],color='r',linestyle='-')
+
+'''
+for i in range(N):
+    ax.plot3D(S[:,0,i],S[:,1,i],S[:,2,i])
+'''
+ax.set_xlabel('x')
+ax.set_ylabel('y')
+ax.set_zlabel('z')
+ax.set_aspect('equal')
+plt.show()    
