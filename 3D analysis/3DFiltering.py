@@ -6,6 +6,8 @@ import pyransac
 import copy
 from scipy.spatial.transform import Rotation as rot
 import random
+import geomdl
+from geomdl.fitting import approximate_curve
 
 ### Cylinder Model
 class CylModel(Model):
@@ -147,7 +149,7 @@ class RCylModel(Model):
 def filterDATA(pcd0):
     #Far point removal
     points = np.asarray(pcd0.points)
-    z_threshold=-1.1
+    z_threshold=-0.8
     pcd1 = pcd0.select_by_index(np.where(points[:,2] > z_threshold)[0])
     
     points = np.asarray(pcd1.points)
@@ -159,7 +161,7 @@ def filterDATA(pcd0):
     pcd1 = pcd1.select_by_index(np.where(points[:,0] > x2_threshold)[0])
     
     #White point removal
-    white_threshold=0.4
+    white_threshold=0.3
     colors = np.asarray(pcd1.colors)
     color = (colors[:,0]+colors[:,1]+colors[:,2])/3
     pcd1 = pcd1.select_by_index(np.where(color < white_threshold)[0])
@@ -203,6 +205,7 @@ def CylinderDipslay(Bestmodel,pcdInliers):
 
     #center=Rot.apply(center)
     C=C+center*D
+    Bestmodel.center=C
 
 
     #Cylinder display
@@ -214,7 +217,7 @@ def CylinderDipslay(Bestmodel,pcdInliers):
     return Cylinder
 
 #Data acquisition ============================================================
-pcd0 = o3d.io.read_point_cloud("data_23-05-04_14-56-00/pc1.ply")
+pcd0 = o3d.io.read_point_cloud("DAta_1_joint/30deg/pc9.ply")
 pcd1 = filterDATA(pcd0)
 normal_param=o3d.geometry.KDTreeSearchParamRadius(0.005)
 pcd1.estimate_normals()
@@ -225,6 +228,10 @@ normals=np.asarray(pcd1.normals)
 PN=np.array([points,normals])
 PN=np.swapaxes(PN,0,1)
 PNL=np.ndarray.tolist(PN)
+
+
+o3d.visualization.draw_geometries([pcd1])
+
 
 #here you can choose between fixed (RCylModel()) and variable (CylModel()) radius for the cylinder research
 Mymodel=RCylModel()
@@ -299,7 +306,7 @@ o3d.visualization.draw_geometries([Cylinder,pcd3,line_set])
 params=ransac.RansacParams(samples=3, iterations=1000, confidence=0.99999, threshold=0.003)
 #Ransac application
 
-Inliers,Bestmodel=pyransac.find_inliers(PNL, Mymodel, params)
+Inliers,Bestmodel,ratio=pyransac.find_inliers(PNL, Mymodel, params)
 #Inlier reformatting
 Inliers=np.array(Inliers)
 Inliers=Inliers[:,0,:]
@@ -317,8 +324,9 @@ o3d.visualization.draw_geometries([Cylinder,pcdInliers,pcd1])
 '''
 
 ###space partition ===========================================================
+
 params=ransac.RansacParams(samples=3, iterations=1000, confidence=0.99999, threshold=0.0005)
-densit_threshold=1200
+densit_threshold=1300
 
 size=0.04
 densit_threshold*=size
@@ -327,18 +335,19 @@ grid=grid.create_from_point_cloud(pcd1,voxel_size=size)
 disp_grid=o3d.geometry.TriangleMesh()
 disp_grid=grid.TriangleMesh
 voxels=np.asarray(grid.get_voxels())
+print(len(voxels),' voxels generated with' ,len(points),'points')
 X=points[:,0]
 Y=points[:,1]
 Z=points[:,2]
 i=0
+P=[]
 pcdVox=[]
 Cylinder=[]
-print(len(voxels))
+ratios=[]
 for i in range(len(voxels)):
     pcdi=o3d.geometry.PointCloud()
     index = voxels[i].grid_index
     center = grid.get_voxel_center_coordinate(index)
-    print(center)
     pcdi=copy.deepcopy(pcd1)
     X=points[:,0]
     Y=points[:,1]
@@ -373,30 +382,46 @@ for i in range(len(voxels)):
     color=[random.random(),random.random(),random.random()]
     pcdi.paint_uniform_color(color)
     pcdVox.append(pcdi)
-    print(i,':',len(pcdi.points))
     if len(pcdi.points) > np.abs(densit_threshold/center[2]):
-        print('voxel ',i,' computation for ',len(pcdi.points),' points limit :',densit_threshold/center[2])
+        print('voxel ',i,' computation for ',len(pcdi.points),' points limit :',np.abs(densit_threshold/center[2]))
         normalsi=np.asarray(pcdi.normals)
         PN=np.array([pointsi,normalsi])
         PN=np.swapaxes(PN,0,1)
         PNL=np.ndarray.tolist(PN)
         
         
-        Inliers,Bestmodel=pyransac.find_inliers(PNL, Mymodel, params)
-        #Inlier reformatting
-        Inliers=np.array(Inliers)
-        Inliers=Inliers[:,0,:]
-        Inliers=np.ndarray.tolist(Inliers)
-        pcdInliers=o3d.geometry.PointCloud()
-        pcdInliers.points=o3d.utility.Vector3dVector(Inliers)
-        pcdInliers.paint_uniform_color([1,0,0])
-        Cylinderi=CylinderDipslay(Bestmodel,pcdInliers)
-        Cylinderi.paint_uniform_color(color)
-        Cylinder.append(Cylinderi)
+        Inliers,Bestmodel,ratio=pyransac.find_inliers(PNL, Mymodel, params)
+        if ratio > 0.5:
+            print(' ---->  voxel ',i,' Inlier ratio :',ratio,' Cylinder kept :',len(Cylinder)+1)
+            ratios.append(ratio)
+            #Inlier reformatting
+            Inliers=np.array(Inliers)
+            Inliers=Inliers[:,0,:]
+            Inliers=np.ndarray.tolist(Inliers)
+            pcdInliers=o3d.geometry.PointCloud()
+            pcdInliers.points=o3d.utility.Vector3dVector(Inliers)
+            pcdInliers.paint_uniform_color([1,0,0])
+            Cylinderi=CylinderDipslay(Bestmodel,pcdInliers)
+            Cylinderi.paint_uniform_color(color)
+            Cylinder.append(Cylinderi)
+            P.append(Bestmodel.center)
+        else:
+            print(' ---->  voxel ',i,' Inlier ratio :',ratio,' Cylinder discarded:')
     else:
-        print('voxel ',i,' skipped',len(pcdi.points),' points limit :',densit_threshold/center[2])
-    
-    
-#disp_grid=o3d.geometry.LineSet.create_from_triangle_mesh(disp_grid)
-o3d.visualization.draw_geometries(pcdVox+Cylinder)
+        print('voxel ',i,' skipped',len(pcdi.points),' points limit :',np.abs(densit_threshold/center[2]))
 
+print(len(Cylinder),'cylinder generated')       
+curve=approximate_curve(P, 2,ctrlpts_size=3)
+curve.evaluate(start=0,stop=1)
+curvepoints=curve.evalpts
+line=[]
+for i in range(len(curvepoints)-1):
+    line.append([i,i+1])
+line_set = o3d.geometry.LineSet()
+line_set.points = o3d.utility.Vector3dVector(curvepoints)
+line_set.lines = o3d.utility.Vector2iVector(line)
+pcdcenter=o3d.geometry.PointCloud()    
+pcdcenter.points=o3d.utility.Vector3dVector(P)
+pcdcenter.paint_uniform_color([1,0,0])
+#disp_grid=o3d.geometry.LineSet.create_from_triangle_mesh(disp_grid)
+o3d.visualization.draw_geometries(Cylinder+pcdVox+[pcdcenter,line_set])

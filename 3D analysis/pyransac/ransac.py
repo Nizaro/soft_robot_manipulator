@@ -72,10 +72,10 @@ def find_inliers(points: List, model: Model, params: RansacParams):
             iterations = log(confidence) / log(1 - ratio ** params.samples)
             
 
-        print('iteration:',i,'/',iterations,'Ratio:',ratio)
+        #print('iteration:',i,'/',iterations,'Ratio:',ratio)
         i += 1
 
-    return inliers, best_model
+    return inliers, best_model,ratio
 
 
 def _find_supporters(points: List, model: Model, threshold: float) -> List:

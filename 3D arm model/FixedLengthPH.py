@@ -460,7 +460,7 @@ ax.set_aspect('equal')
 plt.show()
 '''
 ###surface construction =======================================================
-'''
+
 ax = plt.axes(projection='3d')
 L=2
 n=3
@@ -486,14 +486,15 @@ S1=SmoothConstruct(p, L, k, ray)
 S2=SegmentedConstruct(p, L, k, ray,4)
 for j in range(n):
     for l in range(20):
-        #ax.plot3D(S1[0,l*5,j,:],S1[1,l*5,j,:],S1[2,l*5,j,:],color='b',linestyle='-')
-        ax.plot3D(S2[0,l*5,j,:],S2[1,l*5,j,:],S2[2,l*5,j,:],color='r',linestyle='-')
+        ax.plot3D(S1[0,l*5,j,:],S1[1,l*5,j,:],S1[2,l*5,j,:],color='b',linestyle='-')
+        #ax.plot3D(S2[0,l*5,j,:],S2[1,l*5,j,:],S2[2,l*5,j,:],color='r',linestyle='-')
 
 ax.set_xlabel('x')
 ax.set_ylabel('y')
 ax.set_zlabel('z')
 ax.set_aspect('equal')
 plt.show()       
+
 '''
 k=30
 ray=0.27
@@ -512,12 +513,13 @@ for j in range(N):
         #ax.plot3D(S1[0,l*5,j,:],S1[1,l*5,j,:],S1[2,l*5,j,:],color='b',linestyle='-')
         ax.plot3D(S2[0,l*5,j,:],S2[1,l*5,j,:],S2[2,l*5,j,:],color='r',linestyle='-')
 
-'''
+
 for i in range(N):
     ax.plot3D(S[:,0,i],S[:,1,i],S[:,2,i])
-'''
+
 ax.set_xlabel('x')
 ax.set_ylabel('y')
 ax.set_zlabel('z')
 ax.set_aspect('equal')
 plt.show()    
+'''
