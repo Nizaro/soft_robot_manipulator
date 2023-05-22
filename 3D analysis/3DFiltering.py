@@ -149,8 +149,12 @@ class RCylModel(Model):
 def filterDATA(pcd0):
     #Far point removal
     points = np.asarray(pcd0.points)
-    z_threshold=-0.8
-    pcd1 = pcd0.select_by_index(np.where(points[:,2] > z_threshold)[0])
+    z1_threshold=-0.8
+    pcd1 = pcd0.select_by_index(np.where(points[:,2] > z1_threshold)[0])
+    
+    points = np.asarray(pcd1.points)
+    z2_threshold=-0.1
+    pcd1 = pcd1.select_by_index(np.where(points[:,2] < z2_threshold)[0])
     
     points = np.asarray(pcd1.points)
     x1_threshold=0.2
@@ -217,7 +221,7 @@ def CylinderDipslay(Bestmodel,pcdInliers):
     return Cylinder
 
 #Data acquisition ============================================================
-pcd0 = o3d.io.read_point_cloud("DAta_1_joint/30deg/pc9.ply")
+pcd0 = o3d.io.read_point_cloud("DAta_1_joint/40deg/pc12.ply")
 pcd1 = filterDATA(pcd0)
 normal_param=o3d.geometry.KDTreeSearchParamRadius(0.005)
 pcd1.estimate_normals()
@@ -328,7 +332,7 @@ o3d.visualization.draw_geometries([Cylinder,pcdInliers,pcd1])
 params=ransac.RansacParams(samples=3, iterations=1000, confidence=0.99999, threshold=0.0005)
 densit_threshold=1300
 
-size=0.04
+size=0.05
 densit_threshold*=size
 grid=o3d.geometry.VoxelGrid()
 grid=grid.create_from_point_cloud(pcd1,voxel_size=size)
@@ -383,7 +387,7 @@ for i in range(len(voxels)):
     pcdi.paint_uniform_color(color)
     pcdVox.append(pcdi)
     if len(pcdi.points) > np.abs(densit_threshold/center[2]):
-        print('voxel ',i,' computation for ',len(pcdi.points),' points limit :',np.abs(densit_threshold/center[2]))
+        print('voxel ',i,'/',len(voxels),' computation for ',len(pcdi.points),' points limit :',np.abs(densit_threshold/center[2]))
         normalsi=np.asarray(pcdi.normals)
         PN=np.array([pointsi,normalsi])
         PN=np.swapaxes(PN,0,1)
@@ -392,7 +396,7 @@ for i in range(len(voxels)):
         
         Inliers,Bestmodel,ratio=pyransac.find_inliers(PNL, Mymodel, params)
         if ratio > 0.5:
-            print(' ---->  voxel ',i,' Inlier ratio :',ratio,' Cylinder kept :',len(Cylinder)+1)
+            print(' ---->   Inlier ratio :',ratio,' Cylinder kept :',len(Cylinder)+1)
             ratios.append(ratio)
             #Inlier reformatting
             Inliers=np.array(Inliers)
@@ -406,12 +410,48 @@ for i in range(len(voxels)):
             Cylinder.append(Cylinderi)
             P.append(Bestmodel.center)
         else:
-            print(' ---->  voxel ',i,' Inlier ratio :',ratio,' Cylinder discarded:')
+            print(' ----> Inlier ratio :',ratio,' Cylinder discarded:')
     else:
-        print('voxel ',i,' skipped',len(pcdi.points),' points limit :',np.abs(densit_threshold/center[2]))
+        print('voxel ',i,'/',len(voxels),' skipped',len(pcdi.points),' points with limit :',np.abs(densit_threshold/center[2]))
 
-print(len(Cylinder),'cylinder generated')       
-curve=approximate_curve(P, 2,ctrlpts_size=3)
+print(len(Cylinder),'cylinder generated')
+NeigThreshold=0.15
+is_neighbour=np.empty([len(Cylinder)],dtype=bool)
+Ends=[]
+is_Ends=np.empty([len(Cylinder)],dtype=bool)
+Parr=np.array(P)
+for i in range(len(Cylinder)):
+    dist=P-P[i]
+    dist=np.array(dist)
+    for k in range(len(Cylinder)):
+        is_neighbour[k]=np.linalg.norm(dist[k,:]) <= NeigThreshold
+    
+    Neighbour=Parr[is_neighbour]
+    dist=dist[is_neighbour]
+    (u,s,v)=np.linalg.svd((1/4)*np.matmul(np.transpose(dist),dist))
+    Direction=u[:,0]/np.linalg.norm(u[:,0])
+    Nbdroite=0
+    Nbgauche=0
+    for k in range(len(dist)):
+        sens=np.dot(dist[k],Direction)
+        if sens > 0:
+            Nbdroite+=1
+        elif sens <0:
+            Nbgauche+=1
+    if Nbdroite==0 or Nbgauche==0 :
+        Ends.append(P[i])
+        is_Ends[i]=True
+    else :
+        is_Ends[i]=False
+       
+pcdE=o3d.geometry.PointCloud()    
+pcdE.points=o3d.utility.Vector3dVector(Ends)
+pcdE.paint_uniform_color([0,1,0])   
+Porg=P
+Porg.append(Ends[0])
+Porg.reverse()
+Porg.append(Ends[1])
+curve=approximate_curve(Porg, 2,ctrlpts_size=3)
 curve.evaluate(start=0,stop=1)
 curvepoints=curve.evalpts
 line=[]
@@ -424,4 +464,4 @@ pcdcenter=o3d.geometry.PointCloud()
 pcdcenter.points=o3d.utility.Vector3dVector(P)
 pcdcenter.paint_uniform_color([1,0,0])
 #disp_grid=o3d.geometry.LineSet.create_from_triangle_mesh(disp_grid)
-o3d.visualization.draw_geometries(Cylinder+pcdVox+[pcdcenter,line_set])
+o3d.visualization.draw_geometries(pcdVox+[pcdE,pcdcenter,line_set,pcdE])
