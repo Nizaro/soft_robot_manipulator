@@ -221,10 +221,12 @@ def CylinderDipslay(Bestmodel,pcdInliers):
     return Cylinder
 
 #Data acquisition ============================================================
-pcd0 = o3d.io.read_point_cloud("DAta_1_joint/40deg/pc12.ply")
+pcd0 = o3d.io.read_point_cloud("DAta_1_joint/20deg/pc4.ply")
 pcd1 = filterDATA(pcd0)
+pcd1=pcd1.voxel_down_sample(voxel_size=0.005)
 normal_param=o3d.geometry.KDTreeSearchParamRadius(0.005)
 pcd1.estimate_normals()
+
 
 center = pcd1.get_center()
 points = np.asarray(pcd1.points)
@@ -330,9 +332,9 @@ o3d.visualization.draw_geometries([Cylinder,pcdInliers,pcd1])
 ###space partition ===========================================================
 
 params=ransac.RansacParams(samples=3, iterations=1000, confidence=0.99999, threshold=0.0005)
-densit_threshold=1300
+densit_threshold=650
 
-size=0.05
+size=0.01
 densit_threshold*=size
 grid=o3d.geometry.VoxelGrid()
 grid=grid.create_from_point_cloud(pcd1,voxel_size=size)
@@ -386,7 +388,7 @@ for i in range(len(voxels)):
     color=[random.random(),random.random(),random.random()]
     pcdi.paint_uniform_color(color)
     pcdVox.append(pcdi)
-    if len(pcdi.points) > np.abs(densit_threshold/center[2]):
+    if len(pcdi.points) > np.abs(densit_threshold):
         print('voxel ',i,'/',len(voxels),' computation for ',len(pcdi.points),' points limit :',np.abs(densit_threshold/center[2]))
         normalsi=np.asarray(pcdi.normals)
         PN=np.array([pointsi,normalsi])
@@ -395,7 +397,7 @@ for i in range(len(voxels)):
         
         
         Inliers,Bestmodel,ratio=pyransac.find_inliers(PNL, Mymodel, params)
-        if ratio > 0.5:
+        if ratio > 0.7:
             print(' ---->   Inlier ratio :',ratio,' Cylinder kept :',len(Cylinder)+1)
             ratios.append(ratio)
             #Inlier reformatting
@@ -415,11 +417,12 @@ for i in range(len(voxels)):
         print('voxel ',i,'/',len(voxels),' skipped',len(pcdi.points),' points with limit :',np.abs(densit_threshold/center[2]))
 
 print(len(Cylinder),'cylinder generated')
-NeigThreshold=0.15
+NeigThreshold=0.3
 is_neighbour=np.empty([len(Cylinder)],dtype=bool)
 Ends=[]
 is_Ends=np.empty([len(Cylinder)],dtype=bool)
 Parr=np.array(P)
+pop=[]
 for i in range(len(Cylinder)):
     dist=P-P[i]
     dist=np.array(dist)
@@ -441,6 +444,7 @@ for i in range(len(Cylinder)):
     if Nbdroite==0 or Nbgauche==0 :
         Ends.append(P[i])
         is_Ends[i]=True
+        pop.append(i)
     else :
         is_Ends[i]=False
        
@@ -448,6 +452,8 @@ pcdE=o3d.geometry.PointCloud()
 pcdE.points=o3d.utility.Vector3dVector(Ends)
 pcdE.paint_uniform_color([0,1,0])   
 Porg=P
+Porg.pop(max(pop))
+Porg.pop(min(pop))
 Porg.append(Ends[0])
 Porg.reverse()
 Porg.append(Ends[1])
