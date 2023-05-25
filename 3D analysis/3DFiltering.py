@@ -8,6 +8,7 @@ from scipy.spatial.transform import Rotation as rot
 import random
 import geomdl
 from geomdl.fitting import approximate_curve
+from geomdl.fitting import interpolate_curve
 
 ### Cylinder Model
 class CylModel(Model):
@@ -145,7 +146,85 @@ class RCylModel(Model):
         err=np.linalg.norm(np.cross(np.array(point[0])-self.center,self.direction))-self.radius
         err=np.abs(err)
         return err
+    
+#model for 3D curve (used to find centerline  using ransac on centerpoints)
+class Discrete3Dcurve(Model):
+    
+    def __init__(self, points=None,obj=None):
+        self.points=points
+        self.obj=obj
 
+    def make_model(self,input_points):
+        print('______')
+        print(input_points)
+        is_unique=[]
+        is_unique.append(0)
+        for i in range(len(input_points)-1):
+            test=0
+            for j in range(i+1):
+               if input_points[i+1][0]==input_points[j][0]and input_points[i+1][1]==input_points[j][1] and input_points[i+1][2]==input_points[j][2]:
+                   test+=1
+            if test == 0:
+                is_unique.append(i+1)
+        input_points=[input_points[i] for i in is_unique]
+        print('//')
+        print(input_points)
+        NeigThreshold=100
+        is_neighbour=np.empty([len(input_points)],dtype=bool)
+        Ends=[]
+        is_Ends=np.empty([len(input_points)],dtype=bool)
+        pop=[]
+        for i in range(len(input_points)):
+            dist=input_points-input_points[i]
+            dist=np.array(dist)
+            for k in range(len(input_points)):
+                is_neighbour[k]=np.linalg.norm(dist[k,:]) <= NeigThreshold
+            
+            dist=dist[is_neighbour]
+            (u,s,v)=np.linalg.svd((1/4)*np.matmul(np.transpose(dist),dist))
+            Direction=u[:,0]/np.linalg.norm(u[:,0])
+            Nbdroite=0
+            Nbgauche=0
+            for k in range(len(dist)):
+                sens=np.dot(dist[k],Direction)
+                if sens > 0:
+                    Nbdroite+=1
+                elif sens <0:
+                    Nbgauche+=1
+            if Nbdroite==0 or Nbgauche==0 :
+                Ends.append(input_points[i])
+                is_Ends[i]=True
+                pop.append(i)
+            else :
+                is_Ends[i]=False
+        print(pop)
+        print(Ends)       
+        pcdE=o3d.geometry.PointCloud()    
+        pcdE.points=o3d.utility.Vector3dVector(Ends)
+        pcdE.paint_uniform_color([0,1,0])   
+        Porg=input_points
+        Porg.pop(max(pop))
+        Porg.pop(min(pop))
+        Porg.append(Ends[0])
+        Porg.reverse()
+        Porg.append(Ends[-1])
+        print(Porg)
+        
+
+        curve=interpolate_curve(input_points,len(input_points)-1)
+        self.obj=curve
+        curve.evaluate(start=0,stop=1)
+        self.points=curve.evalpts
+        return
+    
+    def calc_error(self, point):
+        dists=np.empty([3,len(self.points)])
+        for i in range(len(self.points)):
+            dists[:,i]=point-self.points[i]
+        err=min(np.sqrt(dists[0,:]**2+dists[1,:]**2+dists[2,:]**2))
+        return err
+
+#Input data treatment to focus on studied object
 def filterDATA(pcd0):
     #Far point removal
     points = np.asarray(pcd0.points)
@@ -171,6 +250,7 @@ def filterDATA(pcd0):
     pcd1 = pcd1.select_by_index(np.where(color < white_threshold)[0])
     return pcd1
 
+#Basic linear regression in 3D
 def findLine(pcd1): 
     center = pcd1.get_center()
     points = np.asarray(pcd1.points)
@@ -181,6 +261,7 @@ def findLine(pcd1):
     
     return center, D3
 
+#Cylinder post-treatment (to be used after ransac). Recompute actual center and return 3D wire cylinder  
 def CylinderDipslay(Bestmodel,pcdInliers):
     
     #Parameter retrieaval
@@ -220,8 +301,157 @@ def CylinderDipslay(Bestmodel,pcdInliers):
     
     return Cylinder
 
+#Application of cylinder RANSAC on each element of a voxelised space
+def Voxelized_Cylinder(points):
+    params=ransac.RansacParams(samples=3, iterations=1000, confidence=0.99999, threshold=0.0005)
+    densit_threshold=500 #Define the limit to compute cylinder in a voxel
+
+    size=0.02 #Voxel dimension
+    densit_threshold*=size
+    #voxel grid generation 
+    grid=o3d.geometry.VoxelGrid()
+    grid=grid.create_from_point_cloud(pcd1,voxel_size=size)
+    disp_grid=o3d.geometry.TriangleMesh()
+    disp_grid=grid.TriangleMesh
+    voxels=np.asarray(grid.get_voxels())
+    print(len(voxels)-1,' voxels generated with' ,len(points),'points / applied threshold :', densit_threshold, 'points')
+    
+    
+    X=points[:,0]
+    Y=points[:,1]
+    Z=points[:,2]
+    i=0
+    P=[]
+    pcdVox=[]
+    Cylinder=[]
+    ratios=[]
+    for i in range(len(voxels)): #iteration over each voxel
+        pcdi=o3d.geometry.PointCloud()
+        index = voxels[i].grid_index
+        center = grid.get_voxel_center_coordinate(index)
+        pcdi=copy.deepcopy(pcd1)
+        #Deletion of every point outside voxel
+        X=points[:,0]
+        Y=points[:,1]
+        Z=points[:,2]
+        pcdi = pcdi.select_by_index(np.where(X < (center[0]+(size/2)))[0])
+        pointsi=np.asarray(pcdi.points)
+        X=pointsi[:,0]
+        Y=pointsi[:,1]
+        Z=pointsi[:,2]
+        pcdi = pcdi.select_by_index(np.where(X > (center[0]-(size/2)))[0])
+        pointsi=np.asarray(pcdi.points)
+        X=pointsi[:,0]
+        Y=pointsi[:,1]
+        Z=pointsi[:,2]
+        pcdi = pcdi.select_by_index(np.where(Y < (center[1]+(size/2)))[0]) 
+        pointsi=np.asarray(pcdi.points)
+        X=pointsi[:,0]
+        Y=pointsi[:,1]
+        Z=pointsi[:,2]
+        pcdi = pcdi.select_by_index(np.where(Y > (center[1]-(size/2)))[0])
+        pointsi=np.asarray(pcdi.points)
+        X=pointsi[:,0]
+        Y=pointsi[:,1]
+        Z=pointsi[:,2]
+        pcdi = pcdi.select_by_index(np.where(Z < (center[2]+(size/2)))[0])
+        pointsi=np.asarray(pcdi.points)
+        X=pointsi[:,0]
+        Y=pointsi[:,1]
+        Z=pointsi[:,2]
+        pcdi = pcdi.select_by_index(np.where(Z > (center[2]-(size/2)))[0])
+        pointsi=np.asarray(pcdi.points)
+        color=[random.random(),random.random(),random.random()]
+        pcdi.paint_uniform_color(color)
+        pcdVox.append(pcdi)
+        if len(pcdi.points) > np.abs(densit_threshold): #If there is enought point in given voxel compute Cylinder
+            print('voxel ',i,'/',len(voxels)-1,' computation for ',len(pcdi.points))
+            normalsi=np.asarray(pcdi.normals)
+            PN=np.array([pointsi,normalsi])
+            PN=np.swapaxes(PN,0,1)
+            PNL=np.ndarray.tolist(PN)
+            
+            
+            Inliers,Bestmodel,ratio=pyransac.find_inliers(PNL, Mymodel, params)
+            if ratio > 0.7:  #If the cylinder is good enough keep it
+                print(' ---->   Inlier ratio :',ratio,' Cylinder kept :',len(Cylinder)+1)
+                ratios.append(ratio)
+                #Inlier reformatting
+                Inliers=np.array(Inliers)
+                Inliers=Inliers[:,0,:]
+                Inliers=np.ndarray.tolist(Inliers)
+                pcdInliers=o3d.geometry.PointCloud()
+                pcdInliers.points=o3d.utility.Vector3dVector(Inliers)
+                pcdInliers.paint_uniform_color([1,0,0])
+                Cylinderi=CylinderDipslay(Bestmodel,pcdInliers)   # Even if cylinder is not shown keep this line, it recompute the proper center
+                Cylinderi.paint_uniform_color(color)
+                Cylinder.append(Cylinderi)
+                P.append(Bestmodel.center)
+            else:
+                print(' ----> Inlier ratio :',ratio,' Cylinder discarded:')
+        else:
+            print('voxel ',i,'/',len(voxels)-1,' skipped',len(pcdi.points))
+
+    print(len(Cylinder),'cylinder generated')
+    
+    return P,Cylinder,pcdVox    
+    
+#Approximation of center line on all center point. Include End points detection /!\ might detect more than two ends 
+def DirectApprox(P):
+    #End point detection ==========================
+    NeigThreshold=0.3
+    is_neighbour=np.empty([len(P)],dtype=bool)
+    Ends=[]
+    is_Ends=np.empty([len(P)],dtype=bool)
+    pop=[]
+    for i in range(len(P)):
+        dist=P-P[i]
+        dist=np.array(dist)
+        for k in range(len(P)):
+            is_neighbour[k]=np.linalg.norm(dist[k,:]) <= NeigThreshold
+        
+        dist=dist[is_neighbour]
+        (u,s,v)=np.linalg.svd((1/4)*np.matmul(np.transpose(dist),dist))
+        Direction=u[:,0]/np.linalg.norm(u[:,0])
+        Nbdroite=0
+        Nbgauche=0
+        for k in range(len(dist)):
+            sens=np.dot(dist[k],Direction)
+            if sens > 0:
+                Nbdroite+=1
+            elif sens <0:
+                Nbgauche+=1
+        if Nbdroite==0 or Nbgauche==0 :
+            Ends.append(P[i])
+            is_Ends[i]=True
+            pop.append(i)
+        else :
+            is_Ends[i]=False
+           
+    pcdE=o3d.geometry.PointCloud()    
+    pcdE.points=o3d.utility.Vector3dVector(Ends)
+    pcdE.paint_uniform_color([0,1,0])  
+    #Point reorganisation with end points at... both ends
+    Porg=P
+    #Porg.pop(max(pop))
+    #Porg.pop(min(pop))
+    Porg.append(Ends[0])
+    Porg.reverse()
+    Porg.append(Ends[1])
+    #Curve approxiamtion
+    curve=approximate_curve(Porg, 2,ctrlpts_size=3)
+    curve.evaluate(start=0,stop=1)
+    curvepoints=curve.evalpts
+    return curvepoints,pcdE
+
+def RANSACApprox(P):
+    params=ransac.RansacParams(samples=3, iterations=100, confidence=0.999, threshold=0.01)
+    Curv=Discrete3Dcurve()
+    CurvInlier,Curv,CurvRatio=pyransac.find_inliers(P, Curv, params)
+    return CurvInlier,Curv,CurvRatio
+
 #Data acquisition ============================================================
-pcd0 = o3d.io.read_point_cloud("DAta_1_joint/20deg/pc4.ply")
+pcd0 = o3d.io.read_point_cloud("DAta_1_joint/40deg/pc2.ply")
 pcd1 = filterDATA(pcd0)
 pcd1=pcd1.voxel_down_sample(voxel_size=0.005)
 normal_param=o3d.geometry.KDTreeSearchParamRadius(0.005)
@@ -277,7 +507,7 @@ P1N=np.array([P1,N1])
 P2N=np.array([P2,N2])
 P3N=np.array([P3,N3])
 Mymodel.make_model([P1N, P2N, P3N])
-D=Mymodel.direction
+D=Mymodel.directionctrlpts_size
 C=Mymodel.center
 R=Mymodel.radius
 
@@ -331,143 +561,67 @@ o3d.visualization.draw_geometries([Cylinder,pcdInliers,pcd1])
 
 ###space partition ===========================================================
 
-params=ransac.RansacParams(samples=3, iterations=1000, confidence=0.99999, threshold=0.0005)
-densit_threshold=650
+P,Cylinder,pcdVox=Voxelized_Cylinder(points)
 
-size=0.01
-densit_threshold*=size
-grid=o3d.geometry.VoxelGrid()
-grid=grid.create_from_point_cloud(pcd1,voxel_size=size)
-disp_grid=o3d.geometry.TriangleMesh()
-disp_grid=grid.TriangleMesh
-voxels=np.asarray(grid.get_voxels())
-print(len(voxels),' voxels generated with' ,len(points),'points')
-X=points[:,0]
-Y=points[:,1]
-Z=points[:,2]
-i=0
-P=[]
-pcdVox=[]
-Cylinder=[]
-ratios=[]
-for i in range(len(voxels)):
-    pcdi=o3d.geometry.PointCloud()
-    index = voxels[i].grid_index
-    center = grid.get_voxel_center_coordinate(index)
-    pcdi=copy.deepcopy(pcd1)
-    X=points[:,0]
-    Y=points[:,1]
-    Z=points[:,2]
-    pcdi = pcdi.select_by_index(np.where(X < (center[0]+(size/2)))[0])
-    pointsi=np.asarray(pcdi.points)
-    X=pointsi[:,0]
-    Y=pointsi[:,1]
-    Z=pointsi[:,2]
-    pcdi = pcdi.select_by_index(np.where(X > (center[0]-(size/2)))[0])
-    pointsi=np.asarray(pcdi.points)
-    X=pointsi[:,0]
-    Y=pointsi[:,1]
-    Z=pointsi[:,2]
-    pcdi = pcdi.select_by_index(np.where(Y < (center[1]+(size/2)))[0]) 
-    pointsi=np.asarray(pcdi.points)
-    X=pointsi[:,0]
-    Y=pointsi[:,1]
-    Z=pointsi[:,2]
-    pcdi = pcdi.select_by_index(np.where(Y > (center[1]-(size/2)))[0])
-    pointsi=np.asarray(pcdi.points)
-    X=pointsi[:,0]
-    Y=pointsi[:,1]
-    Z=pointsi[:,2]
-    pcdi = pcdi.select_by_index(np.where(Z < (center[2]+(size/2)))[0])
-    pointsi=np.asarray(pcdi.points)
-    X=pointsi[:,0]
-    Y=pointsi[:,1]
-    Z=pointsi[:,2]
-    pcdi = pcdi.select_by_index(np.where(Z > (center[2]-(size/2)))[0])
-    pointsi=np.asarray(pcdi.points)
-    color=[random.random(),random.random(),random.random()]
-    pcdi.paint_uniform_color(color)
-    pcdVox.append(pcdi)
-    if len(pcdi.points) > np.abs(densit_threshold):
-        print('voxel ',i,'/',len(voxels),' computation for ',len(pcdi.points),' points limit :',np.abs(densit_threshold/center[2]))
-        normalsi=np.asarray(pcdi.normals)
-        PN=np.array([pointsi,normalsi])
-        PN=np.swapaxes(PN,0,1)
-        PNL=np.ndarray.tolist(PN)
-        
-        
-        Inliers,Bestmodel,ratio=pyransac.find_inliers(PNL, Mymodel, params)
-        if ratio > 0.7:
-            print(' ---->   Inlier ratio :',ratio,' Cylinder kept :',len(Cylinder)+1)
-            ratios.append(ratio)
-            #Inlier reformatting
-            Inliers=np.array(Inliers)
-            Inliers=Inliers[:,0,:]
-            Inliers=np.ndarray.tolist(Inliers)
-            pcdInliers=o3d.geometry.PointCloud()
-            pcdInliers.points=o3d.utility.Vector3dVector(Inliers)
-            pcdInliers.paint_uniform_color([1,0,0])
-            Cylinderi=CylinderDipslay(Bestmodel,pcdInliers)
-            Cylinderi.paint_uniform_color(color)
-            Cylinder.append(Cylinderi)
-            P.append(Bestmodel.center)
-        else:
-            print(' ----> Inlier ratio :',ratio,' Cylinder discarded:')
-    else:
-        print('voxel ',i,'/',len(voxels),' skipped',len(pcdi.points),' points with limit :',np.abs(densit_threshold/center[2]))
+curvepoints,pcdE=DirectApprox(P)
 
-print(len(Cylinder),'cylinder generated')
-NeigThreshold=0.3
-is_neighbour=np.empty([len(Cylinder)],dtype=bool)
-Ends=[]
-is_Ends=np.empty([len(Cylinder)],dtype=bool)
-Parr=np.array(P)
-pop=[]
-for i in range(len(Cylinder)):
-    dist=P-P[i]
-    dist=np.array(dist)
-    for k in range(len(Cylinder)):
-        is_neighbour[k]=np.linalg.norm(dist[k,:]) <= NeigThreshold
-    
-    Neighbour=Parr[is_neighbour]
-    dist=dist[is_neighbour]
-    (u,s,v)=np.linalg.svd((1/4)*np.matmul(np.transpose(dist),dist))
-    Direction=u[:,0]/np.linalg.norm(u[:,0])
-    Nbdroite=0
-    Nbgauche=0
-    for k in range(len(dist)):
-        sens=np.dot(dist[k],Direction)
-        if sens > 0:
-            Nbdroite+=1
-        elif sens <0:
-            Nbgauche+=1
-    if Nbdroite==0 or Nbgauche==0 :
-        Ends.append(P[i])
-        is_Ends[i]=True
-        pop.append(i)
-    else :
-        is_Ends[i]=False
-       
-pcdE=o3d.geometry.PointCloud()    
-pcdE.points=o3d.utility.Vector3dVector(Ends)
-pcdE.paint_uniform_color([0,1,0])   
-Porg=P
-Porg.pop(max(pop))
-Porg.pop(min(pop))
-Porg.append(Ends[0])
-Porg.reverse()
-Porg.append(Ends[1])
-curve=approximate_curve(Porg, 2,ctrlpts_size=3)
-curve.evaluate(start=0,stop=1)
-curvepoints=curve.evalpts
+
+CurvInlier,Curv,CurvRatio=RANSACApprox(P)
+
+pcdInliers=o3d.geometry.PointCloud()
+pcdInliers.points=o3d.utility.Vector3dVector(CurvInlier)
+pcdInliers.paint_uniform_color([0,0,1])
+
+curvepoints2=Curv.points
+Curve=Curv.obj
+
 line=[]
+line2=[]
 for i in range(len(curvepoints)-1):
     line.append([i,i+1])
+    
+for i in range(len(curvepoints2)-1):
+    line2.append([i,i+1])
 line_set = o3d.geometry.LineSet()
 line_set.points = o3d.utility.Vector3dVector(curvepoints)
 line_set.lines = o3d.utility.Vector2iVector(line)
+
+line_set2 = o3d.geometry.LineSet()
+line_set2.points = o3d.utility.Vector3dVector(curvepoints2)
+line_set2.lines = o3d.utility.Vector2iVector(line2)
+line_set2.paint_uniform_color([1,0,0])
+
+r=0.022
+N=100
+K=50
+t=np.linspace(0,1,N)
+theta=np.linspace(0,2*np.pi,K)
+Surf_Points=[]
+Surf_line=[]
+Curvedot=geomdl.operations.derivative_curve(Curve)
+#Curveddot=geomdl.operations.derivative_curve(Curvedot)
+for i in range(N):
+    local_center=np.array(Curve.evaluate_single(t[i]))
+    #local_normal=np.array(Curveddot.evaluate_single(t[i]))
+    #local_normal=local_normal/np.linalg.norm(local_normal)
+    local_tangent=np.array(Curvedot.evaluate_single(t[i]))
+    local_tangent=local_tangent/np.linalg.norm(local_tangent)
+    local_normal=np.cross(local_center,local_tangent)
+    local_normal=local_normal/np.linalg.norm(local_normal)
+    local_binormal=np.cross(local_normal,local_tangent)
+    local_binormal=local_binormal/np.linalg.norm(local_binormal)
+    print(local_normal)
+    for j in range(K):
+        local_point=local_center+r*np.cos(theta[j])*local_normal+r*np.sin(theta[j])*local_binormal
+        Surf_Points.append(local_point)
+    
+pcdSurf=o3d.geometry.PointCloud()    
+pcdSurf.points=o3d.utility.Vector3dVector(Surf_Points)
+pcdSurf.paint_uniform_color([0,0,0.7])
+pcdSurf.estimate_normals()
+
 pcdcenter=o3d.geometry.PointCloud()    
 pcdcenter.points=o3d.utility.Vector3dVector(P)
 pcdcenter.paint_uniform_color([1,0,0])
 #disp_grid=o3d.geometry.LineSet.create_from_triangle_mesh(disp_grid)
-o3d.visualization.draw_geometries(pcdVox+[pcdE,pcdcenter,line_set,pcdE])
+o3d.visualization.draw_geometries([pcd1,line_set2,pcdcenter,pcdSurf])

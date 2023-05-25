@@ -51,8 +51,7 @@ def find_inliers(points: List, model: Model, params: RansacParams):
     ratio=0
 
     while i < iterations:
-        
-        sample_points = random.choices(points, k=params.samples)
+        sample_points = random.sample(points, k=params.samples)
         model.make_model(sample_points)
         supporters = _find_supporters(points, model, params.threshold)
 
@@ -64,6 +63,7 @@ def find_inliers(points: List, model: Model, params: RansacParams):
 
             confidence = 1 - params.confidence
             ratio = len(supporters) / len(points)
+            
 
             # We cannot get more support than all data points
             if ratio == 1:
