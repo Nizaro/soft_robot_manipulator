@@ -322,8 +322,8 @@ def Voxelized_Cylinder(points):
     Z=points[:,2]
     i=0
     P=[]
-    pcdVox=[]
-    Cylinder=[]
+    pcdVox=o3d.geometry.PointCloud()
+    Cylinder=o3d.geometry.LineSet()
     ratios=[]
     for i in range(len(voxels)): #iteration over each voxel
         pcdi=o3d.geometry.PointCloud()
@@ -363,7 +363,7 @@ def Voxelized_Cylinder(points):
         pointsi=np.asarray(pcdi.points)
         color=[random.random(),random.random(),random.random()]
         pcdi.paint_uniform_color(color)
-        pcdVox.append(pcdi)
+        pcdVox +=pcdi
         if len(pcdi.points) > np.abs(densit_threshold): #If there is enought point in given voxel compute Cylinder
             print('voxel ',i,'/',len(voxels)-1,' computation for ',len(pcdi.points))
             normalsi=np.asarray(pcdi.normals)
@@ -374,7 +374,7 @@ def Voxelized_Cylinder(points):
             
             Inliers,Bestmodel,ratio=pyransac.find_inliers(PNL, Mymodel, params)
             if ratio > 0.7:  #If the cylinder is good enough keep it
-                print(' ---->   Inlier ratio :',ratio,' Cylinder kept :',len(Cylinder)+1)
+                print(' ---->   Inlier ratio :',ratio,' Cylinder kept :',len(P)+1)
                 ratios.append(ratio)
                 #Inlier reformatting
                 Inliers=np.array(Inliers)
@@ -385,14 +385,14 @@ def Voxelized_Cylinder(points):
                 pcdInliers.paint_uniform_color([1,0,0])
                 Cylinderi=CylinderDipslay(Bestmodel,pcdInliers)   # Even if cylinder is not shown keep this line, it recompute the proper center
                 Cylinderi.paint_uniform_color(color)
-                Cylinder.append(Cylinderi)
+                Cylinder += Cylinderi
                 P.append(Bestmodel.center)
             else:
                 print(' ----> Inlier ratio :',ratio,' Cylinder discarded:')
         else:
             print('voxel ',i,'/',len(voxels)-1,' skipped',len(pcdi.points))
 
-    print(len(Cylinder),'cylinder generated')
+    print(len(P),'cylinder generated')
     
     return P,Cylinder,pcdVox    
     
@@ -453,6 +453,7 @@ def RANSACApprox(P):
 #Data acquisition ============================================================
 pcd0 = o3d.io.read_point_cloud("DAta_1_joint/40deg/pc2.ply")
 pcd1 = filterDATA(pcd0)
+pcd2=pcd1
 pcd1=pcd1.voxel_down_sample(voxel_size=0.005)
 normal_param=o3d.geometry.KDTreeSearchParamRadius(0.005)
 pcd1.estimate_normals()
@@ -624,4 +625,26 @@ pcdcenter=o3d.geometry.PointCloud()
 pcdcenter.points=o3d.utility.Vector3dVector(P)
 pcdcenter.paint_uniform_color([1,0,0])
 #disp_grid=o3d.geometry.LineSet.create_from_triangle_mesh(disp_grid)
-o3d.visualization.draw_geometries([pcd1,line_set2,pcdcenter,pcdSurf])
+
+vis1 = o3d.visualization.VisualizerWithEditing()
+vis2 = o3d.visualization.VisualizerWithEditing()
+vis3 = o3d.visualization.VisualizerWithEditing()
+vis4 = o3d.visualization.VisualizerWithEditing()
+vis5 = o3d.visualization.VisualizerWithEditing()
+vis6 = o3d.visualization.VisualizerWithEditing()
+vis1.create_window(window_name='TopLeft', width=480, height=300, left=0, top=0)
+vis2.create_window(window_name='Partition', width=480, height=300, left=480, top=0)
+vis3.create_window(window_name='RANSAC Cylinder search', width=480, height=300, left=960, top=0)
+vis4.create_window(window_name='Cylinder centers', width=480, height=300, left=0, top=400)
+vis5.create_window(window_name='RANSAC center line', width=480, height=300, left=480, top=400)
+vis6.create_window(window_name='Generated surface', width=480, height=300, left=960, top=400)
+vis1.add_geometry(pcd1)
+vis2.add_geometry(pcdVox)
+vis3.add_geometry(Cylinder)
+vis4.add_geometry(pcdcenter)
+vis5.add_geometry(line_set2)
+vis6.add_geometry(pcdSurf)
+
+
+o3d.visualization.draw_geometries([pcd2,line_set2,pcdcenter,pcdSurf])
+# o3d.visualization.draw_geometries([pcd1,line_set2,pcdcenter,pcdSurf])
