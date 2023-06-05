@@ -155,8 +155,6 @@ class Discrete3Dcurve(Model):
         self.obj=obj
 
     def make_model(self,input_points):
-        print('______')
-        print(input_points)
         is_unique=[]
         is_unique.append(0)
         for i in range(len(input_points)-1):
@@ -167,8 +165,7 @@ class Discrete3Dcurve(Model):
             if test == 0:
                 is_unique.append(i+1)
         input_points=[input_points[i] for i in is_unique]
-        print('//')
-        print(input_points)
+        
         NeigThreshold=100
         is_neighbour=np.empty([len(input_points)],dtype=bool)
         Ends=[]
@@ -197,8 +194,7 @@ class Discrete3Dcurve(Model):
                 pop.append(i)
             else :
                 is_Ends[i]=False
-        print(pop)
-        print(Ends)       
+                
         pcdE=o3d.geometry.PointCloud()    
         pcdE.points=o3d.utility.Vector3dVector(Ends)
         pcdE.paint_uniform_color([0,1,0])   
@@ -208,7 +204,6 @@ class Discrete3Dcurve(Model):
         Porg.append(Ends[0])
         Porg.reverse()
         Porg.append(Ends[-1])
-        print(Porg)
         
 
         curve=interpolate_curve(input_points,len(input_points)-1)
@@ -446,10 +441,83 @@ def DirectApprox(P):
     return curvepoints,pcdE
 
 def RANSACApprox(P):
+    print('Centerline RANSAC estimation')
     params=ransac.RansacParams(samples=3, iterations=100, confidence=0.999, threshold=0.01)
     Curv=Discrete3Dcurve()
     CurvInlier,Curv,CurvRatio=pyransac.find_inliers(P, Curv, params)
+    print('Inliers kept :',len(CurvInlier)+1,'/',len(P)+1)
     return CurvInlier,Curv,CurvRatio
+
+def Generate_ModelSurf(Curv):
+        
+    curvepoints2=Curv.points
+    Curve=Curv.obj
+    
+    line=[]
+    line2=[]
+    for i in range(len(curvepoints)-1):
+        line.append([i,i+1])
+        
+    for i in range(len(curvepoints2)-1):
+        line2.append([i,i+1])
+    line_set = o3d.geometry.LineSet()
+    line_set.points = o3d.utility.Vector3dVector(curvepoints)
+    line_set.lines = o3d.utility.Vector2iVector(line)
+    
+    line_set2 = o3d.geometry.LineSet()
+    line_set2.points = o3d.utility.Vector3dVector(curvepoints2)
+    line_set2.lines = o3d.utility.Vector2iVector(line2)
+    line_set2.paint_uniform_color([1,0,0])
+    
+    r=0.022
+    N=100
+    K=50
+    t=np.linspace(0,1,N)
+    theta=np.linspace(0,2*np.pi,K)
+    Surf_Points=[]
+    Surf_line=[]
+    Curvedot=geomdl.operations.derivative_curve(Curve)
+    #Curveddot=geomdl.operations.derivative_curve(Curvedot)
+    for i in range(N):
+        local_center=np.array(Curve.evaluate_single(t[i]))
+        #local_normal=np.array(Curveddot.evaluate_single(t[i]))
+        #local_normal=local_normal/np.linalg.norm(local_normal)
+        local_tangent=np.array(Curvedot.evaluate_single(t[i]))
+        local_tangent=local_tangent/np.linalg.norm(local_tangent)
+        local_normal=np.cross(local_center,local_tangent)
+        local_normal=local_normal/np.linalg.norm(local_normal)
+        local_binormal=np.cross(local_normal,local_tangent)
+        local_binormal=local_binormal/np.linalg.norm(local_binormal)
+        for j in range(K):
+            local_point=local_center+r*np.cos(theta[j])*local_normal+r*np.sin(theta[j])*local_binormal
+            Surf_Points.append(local_point)
+      
+    
+    
+    
+    pcdSurf=o3d.geometry.PointCloud()    
+    pcdSurf.points=o3d.utility.Vector3dVector(Surf_Points)
+    pcdSurf.paint_uniform_color([0,0,0.7])
+    pcdSurf.estimate_normals()
+    return pcdSurf,line_set2,Curve,Curvedot
+
+
+def Evaluate_model(pcdSurf,Curvedot,pcd2,pcdInliers):
+    Result_all_dist=pcd2.compute_point_cloud_distance(pcdSurf)  
+    Result_all_dist=np.asarray(Result_all_dist)
+    Result_mean_all_dist=np.mean(Result_all_dist)
+    
+    Result_Inl_dist=pcdInliers.compute_point_cloud_distance(pcdSurf)  
+    Result_Inl_dist=np.asarray(Result_Inl_dist)
+    Result_mean_Inl_dist=np.mean(Result_Inl_dist)
+
+    
+    Result_length=geomdl.operations.length_curve(Curve)
+    Start_dir=np.asarray(Curvedot.evaluate_single(0))
+    End_dir=np.asarray(Curvedot.evaluate_single(1))
+    Result_angle=np.arcsin(np.linalg.norm(np.cross(End_dir/np.linalg.norm(End_dir),Start_dir/np.linalg.norm(Start_dir))))
+    Result_angle*=180/np.pi
+    return Result_angle,Result_length,Result_mean_Inl_dist,Result_mean_all_dist
 
 #Data acquisition ============================================================
 pcd0 = o3d.io.read_point_cloud("DAta_1_joint/40deg/pc2.ply")
@@ -570,77 +638,18 @@ curvepoints,pcdE=DirectApprox(P)
 
 CurvInlier,Curv,CurvRatio=RANSACApprox(P)
 
-pcdInliers=o3d.geometry.PointCloud()
-pcdInliers.points=o3d.utility.Vector3dVector(CurvInlier)
-pcdInliers.paint_uniform_color([0,0,1])
+pcdInlierscenter=o3d.geometry.PointCloud()
+pcdInlierscenter.points=o3d.utility.Vector3dVector(CurvInlier)
+pcdInlierscenter.paint_uniform_color([0,0,1])
 
-curvepoints2=Curv.points
-Curve=Curv.obj
+pcdSurf,line_set,Curve,Curvedot=Generate_ModelSurf(Curv)
 
-line=[]
-line2=[]
-for i in range(len(curvepoints)-1):
-    line.append([i,i+1])
-    
-for i in range(len(curvepoints2)-1):
-    line2.append([i,i+1])
-line_set = o3d.geometry.LineSet()
-line_set.points = o3d.utility.Vector3dVector(curvepoints)
-line_set.lines = o3d.utility.Vector2iVector(line)
-
-line_set2 = o3d.geometry.LineSet()
-line_set2.points = o3d.utility.Vector3dVector(curvepoints2)
-line_set2.lines = o3d.utility.Vector2iVector(line2)
-line_set2.paint_uniform_color([1,0,0])
-
-r=0.022
-N=100
-K=50
-t=np.linspace(0,1,N)
-theta=np.linspace(0,2*np.pi,K)
-Surf_Points=[]
-Surf_line=[]
-Curvedot=geomdl.operations.derivative_curve(Curve)
-#Curveddot=geomdl.operations.derivative_curve(Curvedot)
-for i in range(N):
-    local_center=np.array(Curve.evaluate_single(t[i]))
-    #local_normal=np.array(Curveddot.evaluate_single(t[i]))
-    #local_normal=local_normal/np.linalg.norm(local_normal)
-    local_tangent=np.array(Curvedot.evaluate_single(t[i]))
-    local_tangent=local_tangent/np.linalg.norm(local_tangent)
-    local_normal=np.cross(local_center,local_tangent)
-    local_normal=local_normal/np.linalg.norm(local_normal)
-    local_binormal=np.cross(local_normal,local_tangent)
-    local_binormal=local_binormal/np.linalg.norm(local_binormal)
-    print(local_normal)
-    for j in range(K):
-        local_point=local_center+r*np.cos(theta[j])*local_normal+r*np.sin(theta[j])*local_binormal
-        Surf_Points.append(local_point)
-  
-Result_length=geomdl.operations.length_curve(Curve)
-Start_dir=np.asarray(Curvedot.evaluate_single(0))
-End_dir=np.asarray(Curvedot.evaluate_single(1))
-Result_angle=np.arcsin(np.linalg.norm(np.cross(End_dir/np.linalg.norm(End_dir),Start_dir/np.linalg.norm(Start_dir))))
-Result_angle*=180/np.pi
-
-print(np.asarray(Curvedot.evaluate_single(1))/np.asarray(Curvedot.evaluate_single(0)))
-
-
-
-pcdSurf=o3d.geometry.PointCloud()    
-pcdSurf.points=o3d.utility.Vector3dVector(Surf_Points)
-pcdSurf.paint_uniform_color([0,0,0.7])
-pcdSurf.estimate_normals()
-
-Result_all_dist=pcd2.compute_point_cloud_distance(pcdSurf)  
-Result_mean_all_dist=np.mean(Result_all_dist)
-Result_Inl_dist=pcdInliers.compute_point_cloud_distance(pcdSurf)  
-Result_mean_Inl_dist=np.mean(Result_Inl_dist)
+Result_angle,Result_length,Result_mean_Inl_dist,Result_mean_all_dist=Evaluate_model(pcdSurf, Curvedot, pcd2, pcdInliers)
 
 pcdcenter=o3d.geometry.PointCloud()    
 pcdcenter.points=o3d.utility.Vector3dVector(P)
 pcdcenter.paint_uniform_color([1,0,0])
-#disp_grid=o3d.geometry.LineSet.create_from_triangle_mesh(disp_grid)
+
 
 vis1 = o3d.visualization.VisualizerWithEditing()
 vis2 = o3d.visualization.VisualizerWithEditing()
@@ -658,9 +667,9 @@ vis1.add_geometry(pcd1)
 vis2.add_geometry(pcdVox)
 vis3.add_geometry(Cylinder)
 vis4.add_geometry(pcdcenter)
-vis5.add_geometry(line_set2)
+vis5.add_geometry(line_set)
 vis6.add_geometry(pcdSurf)
 
 
-o3d.visualization.draw_geometries([pcd2,line_set2,pcdcenter,pcdSurf])
+o3d.visualization.draw_geometries([pcd2,line_set,pcdInliers,pcdSurf])
 # o3d.visualization.draw_geometries([pcd1,line_set2,pcdcenter,pcdSurf])
