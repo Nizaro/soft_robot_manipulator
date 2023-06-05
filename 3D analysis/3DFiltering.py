@@ -325,6 +325,7 @@ def Voxelized_Cylinder(points):
     pcdVox=o3d.geometry.PointCloud()
     Cylinder=o3d.geometry.LineSet()
     ratios=[]
+    pcdInliers=o3d.geometry.PointCloud()
     for i in range(len(voxels)): #iteration over each voxel
         pcdi=o3d.geometry.PointCloud()
         index = voxels[i].grid_index
@@ -380,10 +381,10 @@ def Voxelized_Cylinder(points):
                 Inliers=np.array(Inliers)
                 Inliers=Inliers[:,0,:]
                 Inliers=np.ndarray.tolist(Inliers)
-                pcdInliers=o3d.geometry.PointCloud()
-                pcdInliers.points=o3d.utility.Vector3dVector(Inliers)
-                pcdInliers.paint_uniform_color([1,0,0])
-                Cylinderi=CylinderDipslay(Bestmodel,pcdInliers)   # Even if cylinder is not shown keep this line, it recompute the proper center
+                newpcdInliers=o3d.geometry.PointCloud()
+                newpcdInliers.points=o3d.utility.Vector3dVector(Inliers)
+                pcdInliers+=newpcdInliers
+                Cylinderi=CylinderDipslay(Bestmodel,newpcdInliers)   # Even if cylinder is not shown keep this line, it recompute the proper center
                 Cylinderi.paint_uniform_color(color)
                 Cylinder += Cylinderi
                 P.append(Bestmodel.center)
@@ -391,10 +392,10 @@ def Voxelized_Cylinder(points):
                 print(' ----> Inlier ratio :',ratio,' Cylinder discarded:')
         else:
             print('voxel ',i,'/',len(voxels)-1,' skipped',len(pcdi.points))
-
+        pcdInliers.paint_uniform_color([1,0,0])
     print(len(P),'cylinder generated')
     
-    return P,Cylinder,pcdVox    
+    return P,Cylinder,pcdVox,pcdInliers    
     
 #Approximation of center line on all center point. Include End points detection /!\ might detect more than two ends 
 def DirectApprox(P):
@@ -562,7 +563,7 @@ o3d.visualization.draw_geometries([Cylinder,pcdInliers,pcd1])
 
 ###space partition ===========================================================
 
-P,Cylinder,pcdVox=Voxelized_Cylinder(points)
+P,Cylinder,pcdVox,pcdInliers=Voxelized_Cylinder(points)
 
 curvepoints,pcdE=DirectApprox(P)
 
@@ -615,11 +616,26 @@ for i in range(N):
     for j in range(K):
         local_point=local_center+r*np.cos(theta[j])*local_normal+r*np.sin(theta[j])*local_binormal
         Surf_Points.append(local_point)
-    
+  
+Result_length=geomdl.operations.length_curve(Curve)
+Start_dir=np.asarray(Curvedot.evaluate_single(0))
+End_dir=np.asarray(Curvedot.evaluate_single(1))
+Result_angle=np.arcsin(np.linalg.norm(np.cross(End_dir/np.linalg.norm(End_dir),Start_dir/np.linalg.norm(Start_dir))))
+Result_angle*=180/np.pi
+
+print(np.asarray(Curvedot.evaluate_single(1))/np.asarray(Curvedot.evaluate_single(0)))
+
+
+
 pcdSurf=o3d.geometry.PointCloud()    
 pcdSurf.points=o3d.utility.Vector3dVector(Surf_Points)
 pcdSurf.paint_uniform_color([0,0,0.7])
 pcdSurf.estimate_normals()
+
+Result_all_dist=pcd2.compute_point_cloud_distance(pcdSurf)  
+Result_mean_all_dist=np.mean(Result_all_dist)
+Result_Inl_dist=pcdInliers.compute_point_cloud_distance(pcdSurf)  
+Result_mean_Inl_dist=np.mean(Result_Inl_dist)
 
 pcdcenter=o3d.geometry.PointCloud()    
 pcdcenter.points=o3d.utility.Vector3dVector(P)
@@ -632,7 +648,7 @@ vis3 = o3d.visualization.VisualizerWithEditing()
 vis4 = o3d.visualization.VisualizerWithEditing()
 vis5 = o3d.visualization.VisualizerWithEditing()
 vis6 = o3d.visualization.VisualizerWithEditing()
-vis1.create_window(window_name='TopLeft', width=480, height=300, left=0, top=0)
+vis1.create_window(window_name='Input', width=480, height=300, left=0, top=0)
 vis2.create_window(window_name='Partition', width=480, height=300, left=480, top=0)
 vis3.create_window(window_name='RANSAC Cylinder search', width=480, height=300, left=960, top=0)
 vis4.create_window(window_name='Cylinder centers', width=480, height=300, left=0, top=400)
