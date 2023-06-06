@@ -473,6 +473,7 @@ def Generate_ModelSurf(Curv):
     t=np.linspace(0,1,N)
     theta=np.linspace(0,2*np.pi,K)
     Surf_Points=[]
+    print('deg=',Curve.degree,'ctrl=',Curve.ctrlpts)
     Curvedot=geomdl.operations.derivative_curve(Curve)
     #Curveddot=geomdl.operations.derivative_curve(Curvedot)
     for i in range(N):
@@ -675,7 +676,7 @@ o3d.visualization.draw_geometries([pcd2,line_set,pcdcenter,pcdSurf])
 
 ###Testing ====================================================================
 DIR="DAta_1_joint/40deg/"
-N=1 #number of test per image
+N=10 #number of test per image
 img=glob.glob(DIR +'*.ply')
 img_name=copy.deepcopy(img)
 
@@ -684,7 +685,7 @@ Result_length=np.empty(len(img)*N)
 Result_mean_Inl_dist=np.empty(len(img)*N)
 Result_mean_all_dist=np.empty(len(img)*N)
 Result_Time=np.empty(len(img)*N)
-Test_img=np.empty(len(img)*N)
+Test_img=[]
 
 print(len(img),' image to test')
 
@@ -692,7 +693,7 @@ for i in range(len(img)):
     img_name[i]=img_name[i].replace(DIR,'')
     img_name[i]=img_name[i].replace('.ply','')
     for j in range(N):
-        print('Treatment of ',img_name[i],' test ',j,'/',N)
+        print('Treatment of image ',i,'/',len(img),'(',img_name[i],') test ',j+1,'/',N)
         start=timeit.default_timer()
         #acquisition
         pcd0 = o3d.io.read_point_cloud(img[i])
@@ -722,12 +723,13 @@ for i in range(len(img)):
         pcdSurf,line_set,Curve,Curvedot=Generate_ModelSurf(Curv)
         stop=timeit.default_timer()
         #Analysis
-        Test_img[i*N+j]=img_name
+        Test_img.append(img_name[i])
         Result_angle[i*N+j],Result_length[i*N+j],Result_mean_Inl_dist[i*N+j],Result_mean_all_dist[i*N+j]=Evaluate_model(pcdSurf,Curve,Curvedot, pcd2, pcdInliers)
         Result_Time[i*N+j]=stop-start
 
 with open(DIR+'Test.csv', 'w', newline='') as file:
      writer = csv.writer(file)
-     
-     writer.writerows([Test_img,Result_angle,Result_length,Result_mean_Inl_dist,
+     Data=np.array([Test_img,Result_angle,Result_length,Result_mean_Inl_dist,
                        Result_mean_all_dist,Result_Time])
+     
+     writer.writerows(Data)
