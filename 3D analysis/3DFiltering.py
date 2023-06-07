@@ -170,6 +170,9 @@ class Discrete3Dcurve(Model):
                 is_unique.append(i+1)
         input_points=[input_points[i] for i in is_unique]
         
+        if len(input_points)==2:
+            input_points.append((input_points[0]+input_points[1])/2)
+            
         NeigThreshold=100
         is_neighbour=np.empty([len(input_points)],dtype=bool)
         Ends=[]
@@ -441,7 +444,10 @@ def DirectApprox(P):
     curve=approximate_curve(Porg, 2,ctrlpts_size=3)
     curve.evaluate(start=0,stop=1)
     curvepoints=curve.evalpts
-    return curvepoints,pcdE
+    Curv=Discrete3Dcurve()
+    Curv.points=curvepoints
+    Curv.obj=curve
+    return curvepoints,pcdE,Curv
 
 def RANSACApprox(P):
     print('    Centerline RANSAC estimation')
@@ -473,7 +479,7 @@ def Generate_ModelSurf(Curv):
     t=np.linspace(0,1,N)
     theta=np.linspace(0,2*np.pi,K)
     Surf_Points=[]
-    print('deg=',Curve.degree,'ctrl=',Curve.ctrlpts)
+    #print('deg=',Curve.degree,'ctrl=',Curve.ctrlpts)
     Curvedot=geomdl.operations.derivative_curve(Curve)
     #Curveddot=geomdl.operations.derivative_curve(Curvedot)
     for i in range(N):
@@ -504,10 +510,12 @@ def Evaluate_model(pcdSurf,Curve,Curvedot,pcd2,pcdInliers):
     Result_all_dist=pcd2.compute_point_cloud_distance(pcdSurf)  
     Result_all_dist=np.asarray(Result_all_dist)
     Result_mean_all_dist=np.mean(Result_all_dist)
+    Result_dev_all_dist=np.std(Result_all_dist)
     
     Result_Inl_dist=pcdInliers.compute_point_cloud_distance(pcdSurf)  
     Result_Inl_dist=np.asarray(Result_Inl_dist)
     Result_mean_Inl_dist=np.mean(Result_Inl_dist)
+    Result_dev_Inl_dist=np.std(Result_Inl_dist)
 
     
     Result_length=geomdl.operations.length_curve(Curve)
@@ -518,8 +526,8 @@ def Evaluate_model(pcdSurf,Curve,Curvedot,pcd2,pcdInliers):
     return Result_angle,Result_length,Result_mean_Inl_dist,Result_mean_all_dist
 
 #Data acquisition ============================================================
-'''
-pcd0 = o3d.io.read_point_cloud("DAta_1_joint/20deg/pc1.ply")
+
+pcd0 = o3d.io.read_point_cloud("DAta_1_joint/40deg/pc03.ply")
 pcd1 = filterDATA(pcd0)
 pcd2=pcd1
 pcd1=pcd1.voxel_down_sample(voxel_size=0.005)
@@ -541,7 +549,7 @@ o3d.visualization.draw_geometries([pcd1])
 #here you can choose between fixed (RCylModel()) and variable (CylModel()) radius for the cylinder research
 Mymodel=RCylModel()
 Bestmodel=RCylModel()
-'''
+
 ###least squares line=========================================================
 '''
 (center, D3)=findLine(pcd1)
@@ -629,13 +637,14 @@ o3d.visualization.draw_geometries([Cylinder,pcdInliers,pcd1])
 '''
 
 ###space partition ===========================================================
-'''
+
 P,Cylinder,pcdVox,pcdInliers=Voxelized_Cylinder(points,pcd1,PNL,Mymodel)
 
-curvepoints,pcdE=DirectApprox(P)
+
 
 
 CurvInlier,Curv,CurvRatio=RANSACApprox(P)
+#curvepoints,pcdE,Curv=DirectApprox(CurvInlier)
 
 pcdInlierscenter=o3d.geometry.PointCloud()
 pcdInlierscenter.points=o3d.utility.Vector3dVector(CurvInlier)
@@ -672,11 +681,12 @@ vis6.add_geometry(pcdSurf)
 
 o3d.visualization.draw_geometries([pcd2,line_set,pcdcenter,pcdSurf])
 # o3d.visualization.draw_geometries([pcd1,line_set2,pcdcenter,pcdSurf])
-'''
+
 
 ###Testing ====================================================================
-DIR="DAta_1_joint/40deg/"
-N=10 #number of test per image
+'''
+DIR="DAta_1_joint/20deg/"
+N=20 #number of test per image
 img=glob.glob(DIR +'*.ply')
 img_name=copy.deepcopy(img)
 
@@ -693,7 +703,7 @@ for i in range(len(img)):
     img_name[i]=img_name[i].replace(DIR,'')
     img_name[i]=img_name[i].replace('.ply','')
     for j in range(N):
-        print('Treatment of image ',i,'/',len(img),'(',img_name[i],') test ',j+1,'/',N)
+        print('Treatment of image ',i+1,'/',len(img),'(',img_name[i],') test ',j+1,'/',N)
         start=timeit.default_timer()
         #acquisition
         pcd0 = o3d.io.read_point_cloud(img[i])
@@ -715,11 +725,7 @@ for i in range(len(img)):
         
         #Computation
         P,Cylinder,pcdVox,pcdInliers=Voxelized_Cylinder(points,pcd1,PNL,Mymodel)
-        curvepoints,pcdE=DirectApprox(P)
         CurvInlier,Curv,CurvRatio=RANSACApprox(P)
-        pcdInlierscenter=o3d.geometry.PointCloud()
-        pcdInlierscenter.points=o3d.utility.Vector3dVector(CurvInlier)
-        pcdInlierscenter.paint_uniform_color([0,0,1])
         pcdSurf,line_set,Curve,Curvedot=Generate_ModelSurf(Curv)
         stop=timeit.default_timer()
         #Analysis
@@ -733,3 +739,4 @@ with open(DIR+'Test.csv', 'w', newline='') as file:
                        Result_mean_all_dist,Result_Time])
      
      writer.writerows(Data)
+'''

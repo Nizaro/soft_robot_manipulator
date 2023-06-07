@@ -51,8 +51,10 @@ def find_inliers(points: List, model: Model, params: RansacParams):
     ratio=0
 
     while i < iterations:
-        sample_points = random.sample(points, k=params.samples)
-        model.make_model(sample_points)
+        npoints= list(range(len(points)))
+        sample_points = random.sample(npoints, k=params.samples)
+        lpoints= [points[i] for i in sample_points]
+        model.make_model(lpoints)
         supporters = _find_supporters(points, model, params.threshold)
 
 
