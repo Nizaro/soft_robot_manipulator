@@ -74,7 +74,7 @@ def find_inliers(points: List, model: Model, params: RansacParams):
             iterations = log(confidence) / log(1 - ratio ** params.samples)
             
 
-        #print('iteration:',i,'/',iterations,'Ratio:',ratio)
+        #print('iteration:',i,'/',iterations,'Ratio:',ratio,' Validity:',Valid)
         i += 1
 
     return inliers, best_model,ratio
