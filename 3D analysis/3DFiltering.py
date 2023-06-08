@@ -293,12 +293,11 @@ class Discrete3Dcurve_Length(Model):
         curve.evaluate(start=0,stop=1)
         self.points=curve.evalpts
         Act_length=geomdl.operations.length_curve(curve)
-        Tolerance=0.2
+        Tolerance=0.05
         if Act_length>self.target_Length*(1-Tolerance) and Act_length<self.target_Length*(1+Tolerance):
             Valid=True
         else:
             Valid=False
-        print(Act_length)
         return Valid
     
     def calc_error(self, point):
@@ -546,10 +545,13 @@ def RANSACApprox(P):
 
 def RANSACApprox_Length(P):
     print('    Centerline RANSAC estimation')
-    params=ransac.RansacParams(samples=3, iterations=10000, confidence=0.7, threshold=0.01)
+    params=ransac.RansacParams(samples=3, iterations=200, confidence=0.7, threshold=0.01)
     Curv=Discrete3Dcurve_Length()
     Curv.target_Length=42*0.044/5
     CurvInlier,Curv,CurvRatio=pyransac.find_inliers(P, Curv, params)
+    if Curv.obj==None:
+        Curv=Discrete3Dcurve()
+        CurvInlier,Curv,CurvRatio=pyransac.find_inliers(P, Curv, params)
     print('    Inliers kept :',len(CurvInlier),'/',len(P)-2)
     return CurvInlier,Curv,CurvRatio
 
@@ -622,7 +624,7 @@ def Evaluate_model(pcdSurf,Curve,Curvedot,pcd2,pcdInliers):
     return Result_angle,Result_length,Result_mean_Inl_dist,Result_mean_all_dist
 
 #Data acquisition ============================================================
-
+'''
 pcd0 = o3d.io.read_point_cloud("DAta_1_joint/40deg/pc03.ply")
 pcd1 = filterDATA(pcd0)
 pcd2=pcd1
@@ -645,7 +647,7 @@ o3d.visualization.draw_geometries([pcd1])
 #here you can choose between fixed (RCylModel()) and variable (CylModel()) radius for the cylinder research
 Mymodel=RCylModel()
 Bestmodel=RCylModel()
-
+'''
 ###least squares line=========================================================
 '''
 (center, D3)=findLine(pcd1)
@@ -733,7 +735,7 @@ o3d.visualization.draw_geometries([Cylinder,pcdInliers,pcd1])
 '''
 
 ###space partition ===========================================================
-
+'''
 P,Cylinder,pcdVox,pcdInliers=Voxelized_Cylinder(points,pcd1,PNL,Mymodel)
 
 
@@ -778,11 +780,11 @@ vis6.add_geometry(pcdSurf)
 
 o3d.visualization.draw_geometries([pcd2,line_set,pcdcenter,pcdSurf])
 # o3d.visualization.draw_geometries([pcd1,line_set2,pcdcenter,pcdSurf])
-
+'''
 
 ###Testing ====================================================================
-'''
-DIR="DAta_1_joint/20deg/"
+
+DIR="DAta_1_joint/40deg/"
 N=20 #number of test per image
 img=glob.glob(DIR +'*.ply')
 img_name=copy.deepcopy(img)
@@ -822,7 +824,7 @@ for i in range(len(img)):
         
         #Computation
         P,Cylinder,pcdVox,pcdInliers=Voxelized_Cylinder(points,pcd1,PNL,Mymodel)
-        CurvInlier,Curv,CurvRatio=RANSACApprox(P)
+        CurvInlier,Curv,CurvRatio=RANSACApprox_Length(P)
         pcdSurf,line_set,Curve,Curvedot=Generate_ModelSurf(Curv)
         stop=timeit.default_timer()
         #Analysis
@@ -830,10 +832,9 @@ for i in range(len(img)):
         Result_angle[i*N+j],Result_length[i*N+j],Result_mean_Inl_dist[i*N+j],Result_mean_all_dist[i*N+j]=Evaluate_model(pcdSurf,Curve,Curvedot, pcd2, pcdInliers)
         Result_Time[i*N+j]=stop-start
 
-with open(DIR+'Test.csv', 'w', newline='') as file:
+with open(DIR+'Test_Length.csv', 'w', newline='') as file:
      writer = csv.writer(file)
      Data=np.array([Test_img,Result_angle,Result_length,Result_mean_Inl_dist,
                        Result_mean_all_dist,Result_Time])
      
      writer.writerows(Data)
-'''
