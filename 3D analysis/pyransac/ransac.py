@@ -54,11 +54,11 @@ def find_inliers(points: List, model: Model, params: RansacParams):
         npoints= list(range(len(points)))
         sample_points = random.sample(npoints, k=params.samples)
         lpoints= [points[i] for i in sample_points]
-        model.make_model(lpoints)
+        Valid=model.make_model(lpoints)
         supporters = _find_supporters(points, model, params.threshold)
 
 
-        if len(supporters) > max_support:
+        if len(supporters) > max_support and Valid==True:
             max_support = len(supporters)
             inliers = supporters
             best_model=copy.deepcopy(model)

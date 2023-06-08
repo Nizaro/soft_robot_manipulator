@@ -71,7 +71,7 @@ class CylModel(Model):
         self.direction=D
         self.center=C
         self.radius=R
-        return
+        return True
     
     def calc_error(self, point):
         err=np.linalg.norm(np.cross(np.array(point[0])-self.center,self.direction))-self.radius
@@ -144,7 +144,7 @@ class RCylModel(Model):
         self.direction=D
         self.center=C
         self.radius=R
-        return
+        return True
     
     def calc_error(self, point):
         err=np.linalg.norm(np.cross(np.array(point[0])-self.center,self.direction))-self.radius
@@ -217,7 +217,7 @@ class Discrete3Dcurve(Model):
         self.obj=curve
         curve.evaluate(start=0,stop=1)
         self.points=curve.evalpts
-        return
+        return True
     
     def calc_error(self, point):
         dists=np.empty([3,len(self.points)])
