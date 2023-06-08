@@ -388,7 +388,12 @@ def Voxelized_Cylinder(points,pcd1,PNL,Mymodel):
                 Cylinderi=CylinderDipslay(Bestmodel,newpcdInliers)   # Even if cylinder is not shown keep this line, it recompute the proper center
                 Cylinderi.paint_uniform_color(color)
                 Cylinder += Cylinderi
-                P.append(Bestmodel.center)
+                Punique=True
+                for j in range(len(P)):
+                    if Bestmodel.center[0]==P[j][0]and Bestmodel.center[1]==P[j][1] and Bestmodel.center[2]==P[j][2]:
+                        Punique=False
+                if Punique==True:
+                    P.append(Bestmodel.center)
         #     else:
         #         print(' ----> Inlier ratio :',ratio,' Cylinder discarded:')
         # else:
