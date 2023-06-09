@@ -297,7 +297,100 @@ class Discrete3Dcurve_Length(Model):
         
         ###CLength Criterion_______________________
         Act_length=geomdl.operations.length_curve(curve)
-        Tolerance=0.05
+        Tolerance=0.1
+        if Act_length>self.target_Length*(1-Tolerance) and Act_length<self.target_Length*(1+Tolerance):
+            Valid=True
+        else:
+            Valid=False
+        return Valid
+    
+    def calc_error(self, point): #Compute the distance of a given point to the curve
+        dists=np.empty([3,len(self.points)])
+        for i in range(len(self.points)):
+            dists[:,i]=point-self.points[i]
+        err=min(np.sqrt(dists[0,:]**2+dists[1,:]**2+dists[2,:]**2))
+        return err
+
+#model for 3D curve with criterion on length and defined starting point
+class Discrete3Dcurve_Length_Start(Model):
+    
+    def __init__(self, points=None,obj=None,target_Length=None,Start=None):
+        self.points=points
+        self.obj=obj
+        self.target_Length=target_Length
+        self.Start=Start
+
+    def make_model(self,input_points):
+        ###Security against duplicate________________
+        is_unique=[]
+        is_unique.append(0)
+        for i in range(len(input_points)-1):
+            test=0
+            for j in range(i+1):
+               if input_points[i+1][0]==input_points[j][0]and input_points[i+1][1]==input_points[j][1] and input_points[i+1][2]==input_points[j][2]:
+                   test+=1
+            if test == 0:
+                is_unique.append(i+1)
+        input_points=[input_points[i] for i in is_unique]
+        ###End points detection______________________ 
+        #if len(input_points)==2:
+        #    input_points.append((input_points[0]+input_points[1])/2)
+            
+        NeigThreshold=100
+        is_neighbour=np.empty([len(input_points)],dtype=bool)
+        Ends=[]
+        is_Ends=np.empty([len(input_points)],dtype=bool)
+        pop=[]
+        for i in range(len(input_points)):
+            dist=input_points-input_points[i]
+            dist=np.array(dist)
+            for k in range(len(input_points)):
+                is_neighbour[k]=np.linalg.norm(dist[k,:]) <= NeigThreshold
+            
+            dist=dist[is_neighbour]
+            (u,s,v)=np.linalg.svd((1/4)*np.matmul(np.transpose(dist),dist))
+            Direction=u[:,0]/np.linalg.norm(u[:,0])
+            Nbdroite=0
+            Nbgauche=0
+            for k in range(len(dist)):
+                sens=np.dot(dist[k],Direction)
+                if sens > 0:
+                    Nbdroite+=1
+                elif sens <0:
+                    Nbgauche+=1
+            if Nbdroite==0 or Nbgauche==0 :
+                Ends.append(input_points[i])
+                is_Ends[i]=True
+                pop.append(i)
+            else :
+                is_Ends[i]=False
+              
+        ###Reorganization of points__________________
+        Porg=input_points
+        Porg.pop(max(pop))
+        Porg.pop(min(pop))
+        Porg.append(Ends[0])
+        Porg.reverse()
+        Porg.append(Ends[-1])
+        Dstart=np.linalg.norm(self.Start-Porg[0])
+        Dend=np.linalg.norm(self.Start-Porg[-1])
+        if Dend<Dstart:
+            Porg.append(self.Start)
+        else:
+            Porg.reverse()
+            Porg.append(self.Start)
+        Porg.reverse()
+        print(len(Porg))
+        
+        ###Curve interpolation_______________________
+        curve=interpolate_curve(input_points,len(input_points)-1)
+        self.obj=curve
+        curve.evaluate(start=0,stop=1)
+        self.points=curve.evalpts
+        
+        ###CLength Criterion_______________________
+        Act_length=geomdl.operations.length_curve(curve)
+        Tolerance=0.025
         if Act_length>self.target_Length*(1-Tolerance) and Act_length<self.target_Length*(1+Tolerance):
             Valid=True
         else:
@@ -565,6 +658,20 @@ def RANSACApprox_Length(P):
     print('    Inliers kept :',len(CurvInlier),'/',len(P)-2)
     return CurvInlier,Curv,CurvRatio
 
+def RANSACApprox_Length_Start(P,Start):
+    print('    Centerline RANSAC estimation')
+    params=ransac.RansacParams(samples=2, iterations=200, confidence=0.7, threshold=0.01)
+    Curv=Discrete3Dcurve_Length_Start()
+    Curv.Start=Start
+    Curv.target_Length=48*0.044/5
+    CurvInlier,Curv,CurvRatio=pyransac.find_inliers(P, Curv, params)
+    #If RANSAC with length criterion fail try again without criterion
+    if Curv.obj==None:
+        Curv=Discrete3Dcurve()
+        CurvInlier,Curv,CurvRatio=pyransac.find_inliers(P, Curv, params)
+    print('    Inliers kept :',len(CurvInlier),'/',len(P)-2)
+    return CurvInlier,Curv,CurvRatio
+
 #Generation of cylindrical surface from Nurbs center line
 def Generate_ModelSurf(Curv):
         
@@ -636,14 +743,24 @@ def Evaluate_model(pcdSurf,Curve,Curvedot,pcd2,pcdInliers):
     return Result_angle,Result_length,Result_mean_Inl_dist,Result_mean_all_dist
 
 #Data acquisition ============================================================
+DIR='DAta_1_joint/40deg/'
+img=glob.glob(DIR +'*.ply')
+img_name=copy.deepcopy(img)
+for i in range(len(img)):
+    img_name[i]=img_name[i].replace(DIR,'')
+    img_name[i]=img_name[i].replace('.ply','')
 
-pcd0 = o3d.io.read_point_cloud("DAta_1_joint/40deg/pc03.ply")
+File=3
+File_name=img_name[File]
+pcd0 = o3d.io.read_point_cloud(DIR+File_name+".ply")
 pcd1 = filterDATA(pcd0)
 pcd2=pcd1
 pcd1=pcd1.voxel_down_sample(voxel_size=0.005)
 normal_param=o3d.geometry.KDTreeSearchParamRadius(0.005)
 pcd1.estimate_normals()
 
+Starts=np.load(DIR+'Start_point.npy')
+Start=Starts[File,0:3]
 
 center = pcd1.get_center()
 points = np.asarray(pcd1.points)
@@ -754,7 +871,8 @@ P,Cylinder,pcdVox,pcdInliers=Voxelized_Cylinder(points,pcd1,PNL,Mymodel)
 
 
 #CurvInlier,Curv,CurvRatio=RANSACApprox(P)
-CurvInlier,Curv,CurvRatio=RANSACApprox_Length(P)
+#CurvInlier,Curv,CurvRatio=RANSACApprox_Length(P)
+CurvInlier,Curv,CurvRatio=RANSACApprox_Length_Start(P,Start)
 #curvepoints,pcdE,Curv=DirectApprox(CurvInlier)
 
 pcdInlierscenter=o3d.geometry.PointCloud()
@@ -797,7 +915,7 @@ o3d.visualization.draw_geometries([pcd2,line_set,pcdcenter,pcdSurf])
 ###Testing ====================================================================
 '''
 DIR="DAta_1_joint/40deg/"
-N=20 #number of test per image
+N=30 #number of test per image
 img=glob.glob(DIR +'*.ply')
 img_name=copy.deepcopy(img)
 
