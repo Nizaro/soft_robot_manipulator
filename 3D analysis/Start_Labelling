@@ -14,7 +14,7 @@ point=[]
 normal=[]
 
 
-DIR="DAta_1_joint/40deg/"
+DIR="DAta_1_joint/20deg/"
 img=glob.glob(DIR +'*.ply')
 img_name=copy.deepcopy(img)
 PN=np.empty([len(img),6])
@@ -25,7 +25,7 @@ for i in range(len(img)):
     pcd0.estimate_normals()
     vis1 = o3d.visualization.VisualizerWithEditing()
     
-    vis1.create_window(window_name=img_name[i], width=1100, height=700, left=0, top=0)
+    vis1.create_window(window_name=img_name[i], width=1400, height=700, left=0, top=0)
     vis1.add_geometry(pcd0)
     vis1.run()
     vis1.destroy_window()
