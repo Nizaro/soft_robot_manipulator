@@ -21,7 +21,7 @@ class CylModel(Model):
         self.center=center
         self.radius=radius
         
-    def make_model(self, P1N):
+    def make_model(self, P1N): #Compute a cylinder parameter given 3 point and 2 normals
         
         P2N=P1N[1]
         P3N=P1N[2]
@@ -45,7 +45,7 @@ class CylModel(Model):
         alpha=np.arccos(np.dot(D,[0,0,1]))
          
         r=np.cross(D,np.array([0,0,1]))/np.linalg.norm(np.cross(D,np.array([0,0,1]))) 
-        if np.isnan(r).any()==True:
+        if np.isnan(r).any()==True: #For robustness, create random direction if normal are colinear (Which is frequent, if point as no neighbour the ssame arbitrary norml is defined by o3d)
             R=rot.from_quat([1,0,0,0])
             Rinv=rot.from_quat([1,0,0,0])
         else :
@@ -73,7 +73,7 @@ class CylModel(Model):
         self.radius=R
         return True
     
-    def calc_error(self, point):
+    def calc_error(self, point): #Compute the distance between a point and the cylinder
         err=np.linalg.norm(np.cross(np.array(point[0])-self.center,self.direction))-self.radius
         err=np.abs(err)
         return err
@@ -85,7 +85,7 @@ class RCylModel(Model):
         self.center=center
         self.radius=radius
         
-    def make_model(self, P1N):
+    def make_model(self, P1N):#Compute a cylinder parameter given 2 point and 2 normals
         R=0.022
         
         P2N=P1N[1]
@@ -124,7 +124,7 @@ class RCylModel(Model):
         N2c=N2plane[0]+N2plane[1]*1j
 
 
-        #Computation of center and radius
+        #Computation of center as being at distance R from both input points
         C1=P2c+(P1c-P2c)/2+np.sqrt(R**2+((P1c-P2c)**2)/4)*(P1c-P2c)*np.exp(np.pi*1j/2)/np.abs((P1c-P2c))
         C2=P2c+(P1c-P2c)/2-np.sqrt(R**2+((P1c-P2c)**2)/4)*(P1c-P2c)*np.exp(np.pi*1j/2)/np.abs((P1c-P2c))
         beta=np.angle((P1c-P2c)/N2c)
@@ -132,6 +132,7 @@ class RCylModel(Model):
         inter=P2c+N2c*(np.cos(beta)+np.sin(beta)/np.tan(alpha))
         dist1=np.abs(C1-inter)
         dist2=np.abs(C2-inter)
+        #We choose the point being closest to the intersection of the normals
         if dist1 < dist2:
             Cc=C2
         else:
@@ -146,19 +147,20 @@ class RCylModel(Model):
         self.radius=R
         return True
     
-    def calc_error(self, point):
+    def calc_error(self, point): #Compute the distance between a point and the cylinder
         err=np.linalg.norm(np.cross(np.array(point[0])-self.center,self.direction))-self.radius
         err=np.abs(err)
         return err
     
 #model for 3D curve (used to find centerline  using ransac on centerpoints)
-class Discrete3Dcurve(Model):
+class Discrete3Dcurve(Model): 
     
     def __init__(self, points=None,obj=None):
         self.points=points
         self.obj=obj
 
-    def make_model(self,input_points):
+    def make_model(self,input_points): #Compute Nurbs given points
+        ###Security against duplicate________________
         is_unique=[]
         is_unique.append(0)
         for i in range(len(input_points)-1):
@@ -173,6 +175,7 @@ class Discrete3Dcurve(Model):
         if len(input_points)==2:
             input_points.append((input_points[0]+input_points[1])/2)
             
+        ###End points detection______________________ 
         NeigThreshold=100
         is_neighbour=np.empty([len(input_points)],dtype=bool)
         Ends=[]
@@ -202,9 +205,7 @@ class Discrete3Dcurve(Model):
             else :
                 is_Ends[i]=False
                 
-        pcdE=o3d.geometry.PointCloud()    
-        pcdE.points=o3d.utility.Vector3dVector(Ends)
-        pcdE.paint_uniform_color([0,1,0])   
+        ###Reorganization of points__________________
         Porg=input_points
         Porg.pop(max(pop))
         Porg.pop(min(pop))
@@ -212,7 +213,7 @@ class Discrete3Dcurve(Model):
         Porg.reverse()
         Porg.append(Ends[-1])
         
-
+        ###Curve interpolation_______________________
         curve=interpolate_curve(input_points,len(input_points)-1)
         self.obj=curve
         curve.evaluate(start=0,stop=1)
@@ -226,6 +227,8 @@ class Discrete3Dcurve(Model):
         err=min(np.sqrt(dists[0,:]**2+dists[1,:]**2+dists[2,:]**2))
         return err
 
+
+#model for 3D curve with criterion on length
 class Discrete3Dcurve_Length(Model):
     
     def __init__(self, points=None,obj=None,target_Length=None):
@@ -234,6 +237,7 @@ class Discrete3Dcurve_Length(Model):
         self.target_Length=target_Length
 
     def make_model(self,input_points):
+        ###Security against duplicate________________
         is_unique=[]
         is_unique.append(0)
         for i in range(len(input_points)-1):
@@ -244,7 +248,7 @@ class Discrete3Dcurve_Length(Model):
             if test == 0:
                 is_unique.append(i+1)
         input_points=[input_points[i] for i in is_unique]
-        
+        ###End points detection______________________ 
         if len(input_points)==2:
             input_points.append((input_points[0]+input_points[1])/2)
             
@@ -276,10 +280,8 @@ class Discrete3Dcurve_Length(Model):
                 pop.append(i)
             else :
                 is_Ends[i]=False
-                
-        pcdE=o3d.geometry.PointCloud()    
-        pcdE.points=o3d.utility.Vector3dVector(Ends)
-        pcdE.paint_uniform_color([0,1,0])   
+              
+        ###Reorganization of points__________________
         Porg=input_points
         Porg.pop(max(pop))
         Porg.pop(min(pop))
@@ -287,11 +289,13 @@ class Discrete3Dcurve_Length(Model):
         Porg.reverse()
         Porg.append(Ends[-1])
         
-
+        ###Curve interpolation_______________________
         curve=interpolate_curve(input_points,len(input_points)-1)
         self.obj=curve
         curve.evaluate(start=0,stop=1)
         self.points=curve.evalpts
+        
+        ###CLength Criterion_______________________
         Act_length=geomdl.operations.length_curve(curve)
         Tolerance=0.05
         if Act_length>self.target_Length*(1-Tolerance) and Act_length<self.target_Length*(1+Tolerance):
@@ -300,7 +304,7 @@ class Discrete3Dcurve_Length(Model):
             Valid=False
         return Valid
     
-    def calc_error(self, point):
+    def calc_error(self, point): #Compute the distance of a given point to the curve
         dists=np.empty([3,len(self.points)])
         for i in range(len(self.points)):
             dists[:,i]=point-self.points[i]
@@ -468,13 +472,16 @@ def Voxelized_Cylinder(points,pcd1,PNL,Mymodel):
                 pcdInliers+=newpcdInliers
                 Cylinderi=CylinderDipslay(Bestmodel,newpcdInliers)   # Even if cylinder is not shown keep this line, it recompute the proper center
                 Cylinderi.paint_uniform_color(color)
-                Cylinder += Cylinderi
+                
+                #security against duplicate points
                 Punique=True
                 for j in range(len(P)):
                     if Bestmodel.center[0]==P[j][0]and Bestmodel.center[1]==P[j][1] and Bestmodel.center[2]==P[j][2]:
                         Punique=False
+                        
                 if Punique==True:
                     P.append(Bestmodel.center)
+                    Cylinder += Cylinderi
         #     else:
         #         print(' ----> Inlier ratio :',ratio,' Cylinder discarded:')
         # else:
@@ -535,6 +542,7 @@ def DirectApprox(P):
     Curv.obj=curve
     return curvepoints,pcdE,Curv
 
+#Curve approximation using ransac with Nurbs model
 def RANSACApprox(P):
     print('    Centerline RANSAC estimation')
     params=ransac.RansacParams(samples=3, iterations=100, confidence=0.7, threshold=0.01)
@@ -543,24 +551,27 @@ def RANSACApprox(P):
     print('    Inliers kept :',len(CurvInlier),'/',len(P)-2)
     return CurvInlier,Curv,CurvRatio
 
+#Curve approximation using ransac with Nurbs model with length criterion
 def RANSACApprox_Length(P):
     print('    Centerline RANSAC estimation')
     params=ransac.RansacParams(samples=3, iterations=200, confidence=0.7, threshold=0.01)
     Curv=Discrete3Dcurve_Length()
     Curv.target_Length=42*0.044/5
     CurvInlier,Curv,CurvRatio=pyransac.find_inliers(P, Curv, params)
+    #If RANSAC with length criterion fail try again without criterion
     if Curv.obj==None:
         Curv=Discrete3Dcurve()
         CurvInlier,Curv,CurvRatio=pyransac.find_inliers(P, Curv, params)
     print('    Inliers kept :',len(CurvInlier),'/',len(P)-2)
     return CurvInlier,Curv,CurvRatio
 
+#Generation of cylindrical surface from Nurbs center line
 def Generate_ModelSurf(Curv):
         
     curvepoints2=Curv.points
     Curve=Curv.obj
     
-
+    #Creation of line object with open3d________________________________
     line2=[]
         
     for i in range(len(curvepoints2)-1):
@@ -571,39 +582,40 @@ def Generate_ModelSurf(Curv):
     line_set2.lines = o3d.utility.Vector2iVector(line2)
     line_set2.paint_uniform_color([1,0,0])
     
-    r=0.022
-    N=100
-    K=50
+    ###Surface parameter________________________________________________
+    r=0.022 #radius
+    N=100   #Point count along the main direction
+    K=50    #Point count along the perimeter
     t=np.linspace(0,1,N)
     theta=np.linspace(0,2*np.pi,K)
+    ###Surface computation _____________________________________________
     Surf_Points=[]
     #print('deg=',Curve.degree,'ctrl=',Curve.ctrlpts)
     Curvedot=geomdl.operations.derivative_curve(Curve)
-    #Curveddot=geomdl.operations.derivative_curve(Curvedot)
-    for i in range(N):
+    #Curveddot=geomdl.operations.derivative_curve(Curvedot) #geomdl can't compute second derivativ when degree is too low, it doesn't handle stationnary curve
+    for i in range(N): #iteration along axis
+        #Fresney Frame computation
         local_center=np.array(Curve.evaluate_single(t[i]))
-        #local_normal=np.array(Curveddot.evaluate_single(t[i]))
-        #local_normal=local_normal/np.linalg.norm(local_normal)
         local_tangent=np.array(Curvedot.evaluate_single(t[i]))
         local_tangent=local_tangent/np.linalg.norm(local_tangent)
         local_normal=np.cross(local_center,local_tangent)
         local_normal=local_normal/np.linalg.norm(local_normal)
         local_binormal=np.cross(local_normal,local_tangent)
         local_binormal=local_binormal/np.linalg.norm(local_binormal)
-        for j in range(K):
+        for j in range(K): #iteration along perimeter
             local_point=local_center+r*np.cos(theta[j])*local_normal+r*np.sin(theta[j])*local_binormal
             Surf_Points.append(local_point)
       
     
     
-    
+    #o3d surface object creation
     pcdSurf=o3d.geometry.PointCloud()    
     pcdSurf.points=o3d.utility.Vector3dVector(Surf_Points)
     pcdSurf.paint_uniform_color([0,0,0.7])
     pcdSurf.estimate_normals()
     return pcdSurf,line_set2,Curve,Curvedot
 
-
+#Evaluation of the quality of a model
 def Evaluate_model(pcdSurf,Curve,Curvedot,pcd2,pcdInliers):
     Result_all_dist=pcd2.compute_point_cloud_distance(pcdSurf)  
     Result_all_dist=np.asarray(Result_all_dist)
@@ -624,7 +636,7 @@ def Evaluate_model(pcdSurf,Curve,Curvedot,pcd2,pcdInliers):
     return Result_angle,Result_length,Result_mean_Inl_dist,Result_mean_all_dist
 
 #Data acquisition ============================================================
-'''
+
 pcd0 = o3d.io.read_point_cloud("DAta_1_joint/40deg/pc03.ply")
 pcd1 = filterDATA(pcd0)
 pcd2=pcd1
@@ -647,7 +659,7 @@ o3d.visualization.draw_geometries([pcd1])
 #here you can choose between fixed (RCylModel()) and variable (CylModel()) radius for the cylinder research
 Mymodel=RCylModel()
 Bestmodel=RCylModel()
-'''
+
 ###least squares line=========================================================
 '''
 (center, D3)=findLine(pcd1)
@@ -735,7 +747,7 @@ o3d.visualization.draw_geometries([Cylinder,pcdInliers,pcd1])
 '''
 
 ###space partition ===========================================================
-'''
+
 P,Cylinder,pcdVox,pcdInliers=Voxelized_Cylinder(points,pcd1,PNL,Mymodel)
 
 
@@ -780,10 +792,10 @@ vis6.add_geometry(pcdSurf)
 
 o3d.visualization.draw_geometries([pcd2,line_set,pcdcenter,pcdSurf])
 # o3d.visualization.draw_geometries([pcd1,line_set2,pcdcenter,pcdSurf])
-'''
+
 
 ###Testing ====================================================================
-
+'''
 DIR="DAta_1_joint/40deg/"
 N=20 #number of test per image
 img=glob.glob(DIR +'*.ply')
@@ -832,9 +844,11 @@ for i in range(len(img)):
         Result_angle[i*N+j],Result_length[i*N+j],Result_mean_Inl_dist[i*N+j],Result_mean_all_dist[i*N+j]=Evaluate_model(pcdSurf,Curve,Curvedot, pcd2, pcdInliers)
         Result_Time[i*N+j]=stop-start
 
+#Output file 
 with open(DIR+'Test_Length.csv', 'w', newline='') as file:
      writer = csv.writer(file)
      Data=np.array([Test_img,Result_angle,Result_length,Result_mean_Inl_dist,
                        Result_mean_all_dist,Result_Time])
      
      writer.writerows(Data)
+'''
