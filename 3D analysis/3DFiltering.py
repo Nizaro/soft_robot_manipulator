@@ -366,6 +366,8 @@ class Discrete3Dcurve_Length_Start(Model):
                 is_Ends[i]=False
               
         ###Reorganization of points__________________
+        print('start:',self.Start)
+        print('points :', len(input_points))
         Porg=input_points
         Porg.pop(max(pop))
         Porg.pop(min(pop))
@@ -380,7 +382,7 @@ class Discrete3Dcurve_Length_Start(Model):
             Porg.reverse()
             Porg.append(self.Start)
         Porg.reverse()
-        print(len(Porg))
+
         
         ###Curve interpolation_______________________
         curve=interpolate_curve(input_points,len(input_points)-1)
@@ -390,7 +392,7 @@ class Discrete3Dcurve_Length_Start(Model):
         
         ###CLength Criterion_______________________
         Act_length=geomdl.operations.length_curve(curve)
-        Tolerance=0.025
+        Tolerance=0.1
         if Act_length>self.target_Length*(1-Tolerance) and Act_length<self.target_Length*(1+Tolerance):
             Valid=True
         else:
@@ -663,10 +665,11 @@ def RANSACApprox_Length_Start(P,Start):
     params=ransac.RansacParams(samples=2, iterations=200, confidence=0.7, threshold=0.01)
     Curv=Discrete3Dcurve_Length_Start()
     Curv.Start=Start
-    Curv.target_Length=48*0.044/5
+    Curv.target_Length=46*0.044/5
     CurvInlier,Curv,CurvRatio=pyransac.find_inliers(P, Curv, params)
     #If RANSAC with length criterion fail try again without criterion
     if Curv.obj==None:
+        params=ransac.RansacParams(samples=3, iterations=200, confidence=0.7, threshold=0.01)
         Curv=Discrete3Dcurve()
         CurvInlier,Curv,CurvRatio=pyransac.find_inliers(P, Curv, params)
     print('    Inliers kept :',len(CurvInlier),'/',len(P)-2)
@@ -743,6 +746,7 @@ def Evaluate_model(pcdSurf,Curve,Curvedot,pcd2,pcdInliers):
     return Result_angle,Result_length,Result_mean_Inl_dist,Result_mean_all_dist
 
 #Data acquisition ============================================================
+
 DIR='DAta_1_joint/40deg/'
 img=glob.glob(DIR +'*.ply')
 img_name=copy.deepcopy(img)
@@ -750,7 +754,7 @@ for i in range(len(img)):
     img_name[i]=img_name[i].replace(DIR,'')
     img_name[i]=img_name[i].replace('.ply','')
 
-File=3
+File=2
 File_name=img_name[File]
 pcd0 = o3d.io.read_point_cloud(DIR+File_name+".ply")
 pcd1 = filterDATA(pcd0)
@@ -918,6 +922,7 @@ DIR="DAta_1_joint/40deg/"
 N=30 #number of test per image
 img=glob.glob(DIR +'*.ply')
 img_name=copy.deepcopy(img)
+Starts=np.load(DIR+'Start_point.npy')
 
 Result_angle=np.empty(len(img)*N)
 Result_length=np.empty(len(img)*N)
@@ -942,6 +947,8 @@ for i in range(len(img)):
         normal_param=o3d.geometry.KDTreeSearchParamRadius(0.005)
         pcd1.estimate_normals()
         
+        Start=Starts[i,0:3]
+        
         #Setup
         center = pcd1.get_center()
         points = np.asarray(pcd1.points)
@@ -954,7 +961,7 @@ for i in range(len(img)):
         
         #Computation
         P,Cylinder,pcdVox,pcdInliers=Voxelized_Cylinder(points,pcd1,PNL,Mymodel)
-        CurvInlier,Curv,CurvRatio=RANSACApprox_Length(P)
+        CurvInlier,Curv,CurvRatio=RANSACApprox_Length_Start(P,Start)
         pcdSurf,line_set,Curve,Curvedot=Generate_ModelSurf(Curv)
         stop=timeit.default_timer()
         #Analysis
@@ -963,7 +970,7 @@ for i in range(len(img)):
         Result_Time[i*N+j]=stop-start
 
 #Output file 
-with open(DIR+'Test_Length.csv', 'w', newline='') as file:
+with open(DIR+'Test_Length_Start.csv', 'w', newline='') as file:
      writer = csv.writer(file)
      Data=np.array([Test_img,Result_angle,Result_length,Result_mean_Inl_dist,
                        Result_mean_all_dist,Result_Time])
