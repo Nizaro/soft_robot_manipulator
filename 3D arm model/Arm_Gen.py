@@ -13,6 +13,8 @@ import matplotlib.pyplot as plt
 from scipy.optimize import fsolve
 from scipy.spatial.transform import Rotation as Rot
 import random
+import open3d as o3d
+import copy
 
 #First equation to solve to find satisfying PH curves
 def PHA(x,a,c,k):
@@ -235,10 +237,11 @@ def PH3D(p0,p1,t0,L):
 
     return(t1,r0,rot)
 
-def PCC3D(p1,p2,Q):
-    Sn=np.array([100,3])
+def PCC3D(p1,p2,Q,n):
+    Sn=np.array([n,3])
     r=np.linalg.norm(p2-p1)
-    Sn=np.empty([100,3])
+    Sn=np.empty([n,3])
+    Qn=np.empty([n],dtype=rotation)
     ctheta=np.dot((p2-p1),Q.apply([0,0,1]))/np.linalg.norm(p2-p1)
     theta=np.arccos(ctheta)
     L=r*theta/np.sin(theta)
@@ -246,22 +249,24 @@ def PCC3D(p1,p2,Q):
     rotvec=-np.cross(Q.apply([0,0,1]),(p2-p1))/np.linalg.norm(np.cross(Q.apply([0,0,1]),(p2-p1)))
     rot=Rot.from_rotvec(theta*rotvec)
     O=rho*np.cross(Q.apply([0,0,1]),rotvec)
-    for i in range(100):
-        thetai=theta*i/(99)
+    for i in range(n):
+        thetai=theta*i/(n-1)
         roti=Rot.from_rotvec((-thetai*2)*rotvec)
         Sn[i,:]=p1+O-roti.apply(O)
-        
+        Qn[i]=roti*Q
     
     
-    return Sn
+    return Sn,Qn
     
-def MultiPCC3D(P,Q):
+def MultiPCC3D(P,Q,m):
     n=np.size(P)//3
-    S=np.empty([100,3,n])
+    S=np.empty([m,3,n])
+    Qn=np.empty([m,n],dtype=rotation)
     for i in range(n-1):
-        S[:,:,i]=PCC3D(P[i],P[i+1],Q[i])
+        S[:,:,i],Qn[:,i]=PCC3D(P[i],P[i+1],Q[i],m)
+        
 
-    return S,Q
+    return S,Qn
 
 def MultiPH3D(p,L):
     n=p.size//3
@@ -297,6 +302,25 @@ def SmoothConstruct(p,L,k,ray):
         for j in range(n):
             for m in range(101):
                 S[:,m,j,i]=r[m,:,j]+Q[m,j].apply(rn[:,i])
+                
+    
+    return S
+
+def SmoothConstructPCC(p,L,k,ray,Q,m):
+    Ex=np.array([1,0,0])
+    Ey=np.array([0,1,0])
+    Ez=np.array([0,0,1])
+    n=(p.size//3)-1
+    S=np.empty([3,m+1,n,k])
+    rn=np.empty([3,k])
+    Qn=np.empty([n,k],dtype=rotation)
+    (r,Qn)=MultiPCC3D(p,Q,m)
+    
+    for i in range(k):
+        rn[:,i]=ray*np.cos(np.pi*2*i/k)*Ex+ray*np.sin(np.pi*2*i/k)*Ey
+        for j in range(n):
+            for v in range(m):
+                S[:,v,j,i]=r[v,:,j]+Qn[v,j].apply(rn[:,i])
                 
     
     return S
@@ -345,7 +369,7 @@ def PCCrandom(N,L,rep):
     phi=np.empty([N])
     r=np.empty([N])
     for i in range(N//rep):
-        theta[rep*i]=random.random()*np.pi/5
+        theta[rep*i]=random.random()*np.pi/3
         phi[rep*i]=random.random()*2*np.pi
         r[rep*i]=L*np.sin(theta[i])/theta[i]
         for j in range(rep-1):
@@ -460,7 +484,7 @@ ax.set_aspect('equal')
 plt.show()
 '''
 ###surface construction =======================================================
-
+'''
 ax = plt.axes(projection='3d')
 L=2
 n=3
@@ -496,24 +520,35 @@ ax.set_aspect('equal')
 plt.show()       
 
 '''
-k=30
-ray=0.27
-N=12
-L=0.5
-rep=4
+k=80
+m=200
+ray=0.22
+N=2
+L=2
+rep=1
 phi,theta,r=PCCrandom(N, L,rep)
 P,Q=General_Construct(phi, theta, r)
-S,Q=MultiPCC3D(P, Q)
-S2=SegmentedConstruct2(P, L, k, ray,Q)
+S,Qn=MultiPCC3D(P, Q,m)
+S2=SmoothConstructPCC(P, Q, k, ray,Q,m)
+points=[]
 
-
-ax = plt.axes(projection='3d')
+#ax = plt.axes(projection='3d')
 for j in range(N):
-    for l in range(20):
-        #ax.plot3D(S1[0,l*5,j,:],S1[1,l*5,j,:],S1[2,l*5,j,:],color='b',linestyle='-')
-        ax.plot3D(S2[0,l*5,j,:],S2[1,l*5,j,:],S2[2,l*5,j,:],color='r',linestyle='-')
+    
+    for l in range(m):
+        
+        #ax.plot3D(S2[0,l,j,:],S2[1,l,j,:],S2[2,l,j,:],color='r',linestyle='-')
+        for i in range(k):
+            points.append(S2[:,l,j,i])
+        
+        
+pcd=o3d.geometry.PointCloud()
+pcd.points = o3d.utility.Vector3dVector(points)
+pcd.paint_uniform_color([1,0,0])
+pcd.estimate_normals()
 
 
+'''
 for i in range(N):
     ax.plot3D(S[:,0,i],S[:,1,i],S[:,2,i])
 
@@ -523,3 +558,85 @@ ax.set_zlabel('z')
 ax.set_aspect('equal')
 plt.show()    
 '''
+Camera=np.array([-2,0,0])
+Cameradir=np.array([2,0,1])
+Cameradir=Cameradir/np.linalg.norm(Cameradir)
+viewangle=np.pi/2
+ratio=16/9
+xmax=np.tan(viewangle/2)
+ymax=np.tan(viewangle/(2/ratio))
+xdef=1080
+ydef=int(xdef*ratio)
+
+xres=2*xmax/xdef
+yres=2*ymax/ydef
+pcd2=copy.deepcopy(pcd)
+points=np.asarray(pcd2.points)
+points=points-Camera
+
+ctheta=np.dot(Cameradir,[0,0,1])
+theta=np.arccos(ctheta)
+
+rotvec=np.cross(Cameradir,[0,0,1])/np.linalg.norm(np.cross(Cameradir,[0,0,1]))
+rot=Rot.from_rotvec(theta*rotvec)
+
+
+points=rot.apply(points)
+#points=points+Camera
+pcd2.points=o3d.utility.Vector3dVector(points)
+
+pcd3=copy.deepcopy(pcd2)
+PointCam=o3d.geometry.PointCloud()
+PointCam.points=o3d.utility.Vector3dVector([Camera,Camera+Cameradir])
+PointCam.paint_uniform_color([0,0,0])
+#o3d.visualization.draw_geometries([pcd,PointCam,pcd2])
+
+points=np.asarray(pcd3.points)
+
+points[:,0]=(points[:,0]/points[:,2])
+points[:,1]=(points[:,1]/points[:,2])
+
+points[:,0]=points[:,0]//xres
+points[:,1]=points[:,1]//yres
+
+pcdCamera=o3d.geometry.PointCloud()
+
+
+for i in range(xdef):
+    if i%50==0:
+        print('line:',i)
+    for j in range(ydef):
+        
+        xi=i-xdef/2
+        yj=j-xdef/2
+
+        pcd4=copy.deepcopy(pcd3)
+        pcd4=pcd4.select_by_index(np.where(points[:,0]==xi)[0])
+        newpoints=np.asarray(pcd4.points)
+        pcd4=pcd4.select_by_index(np.where(newpoints[:,1]==yj)[0])
+        newpoints=np.asarray(pcd4.points)
+        if len(newpoints)>0:
+            pcd4=pcd4.select_by_index(np.where(newpoints[:,2]==min(newpoints[:,2]))[0])
+            newpoints=np.asarray(pcd4.points)
+            pcdCamera.points.extend(newpoints)
+
+points=np.asarray(pcdCamera.points)
+points[:,0]=points[:,0]*xres*points[:,2]
+points[:,1]=points[:,1]*yres*points[:,2]
+rot=rot.inv()
+points=rot.apply(points)
+pcdCamera.points=o3d.utility.Vector3dVector(points)
+pcdCamera.translate(Camera)
+pcdCamera.estimate_normals()
+
+
+pcdCamera.paint_uniform_color([0,1,0])
+o3d.visualization.draw_geometries([pcd,PointCam,pcdCamera])
+
+o3d.io.write_point_cloud("Ground_Truth.ply", pcd)
+o3d.io.write_point_cloud("Camera.ply", pcdCamera)
+
+
+
+
+
