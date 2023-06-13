@@ -520,8 +520,9 @@ ax.set_aspect('equal')
 plt.show()       
 
 '''
-k=80
-m=200
+print('Arm Generation')
+k=200
+m=1000
 ray=0.22
 N=2
 L=2
@@ -558,10 +559,10 @@ ax.set_zlabel('z')
 ax.set_aspect('equal')
 plt.show()    
 '''
-Camera=np.array([-2,0,0])
+Camera=np.array([-6,0,0])
 Cameradir=np.array([2,0,1])
 Cameradir=Cameradir/np.linalg.norm(Cameradir)
-viewangle=np.pi/2
+viewangle=np.pi/3
 ratio=16/9
 xmax=np.tan(viewangle/2)
 ymax=np.tan(viewangle/(2/ratio))
@@ -599,37 +600,43 @@ points[:,1]=(points[:,1]/points[:,2])
 points[:,0]=points[:,0]//xres
 points[:,1]=points[:,1]//yres
 
+print('Point sorting')
+SortedPoints= points[(-points[:,2]).argsort()]
+
+print('Pixels computation')
+Pixels=np.ones([xdef,ydef,3])
+Pixels=Pixels*15
+
+
+l=len(SortedPoints)
+for i in range(l):
+    print(i,'/',l)
+    A=SortedPoints[i,:]
+    Pixels[int(A[0]),int(A[1]),:]=A
+
+print('pixel reshape')
+Pixels=np.reshape(Pixels,(xdef*ydef,3),'F')
+
+
+print('spatial transform')
+points=Pixels
 pcdCamera=o3d.geometry.PointCloud()
-
-
-for i in range(xdef):
-    if i%50==0:
-        print('line:',i)
-    for j in range(ydef):
-        
-        xi=i-xdef/2
-        yj=j-xdef/2
-
-        pcd4=copy.deepcopy(pcd3)
-        pcd4=pcd4.select_by_index(np.where(points[:,0]==xi)[0])
-        newpoints=np.asarray(pcd4.points)
-        pcd4=pcd4.select_by_index(np.where(newpoints[:,1]==yj)[0])
-        newpoints=np.asarray(pcd4.points)
-        if len(newpoints)>0:
-            pcd4=pcd4.select_by_index(np.where(newpoints[:,2]==min(newpoints[:,2]))[0])
-            newpoints=np.asarray(pcd4.points)
-            pcdCamera.points.extend(newpoints)
-
+pcdCamera.points=o3d.utility.Vector3dVector(points)
+pcdCamera = pcdCamera.select_by_index(np.where(points[:,2] !=15)[0])
 points=np.asarray(pcdCamera.points)
 points[:,0]=points[:,0]*xres*points[:,2]
 points[:,1]=points[:,1]*yres*points[:,2]
 rot=rot.inv()
 points=rot.apply(points)
+B=points
+print('pointcloud creation')
+
 pcdCamera.points=o3d.utility.Vector3dVector(points)
+
 pcdCamera.translate(Camera)
 pcdCamera.estimate_normals()
 
-
+print('display')
 pcdCamera.paint_uniform_color([0,1,0])
 o3d.visualization.draw_geometries([pcd,PointCam,pcdCamera])
 
