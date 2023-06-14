@@ -16,6 +16,7 @@ import random
 import open3d as o3d
 import copy
 
+
 #First equation to solve to find satisfying PH curves
 def PHA(x,a,c,k):
     F=np.sqrt(a**2-x**2)-np.sqrt(3)*x-2*c-k*(x+np.sqrt(3)*np.sqrt(a**2-x**2))
@@ -401,7 +402,85 @@ def General_Construct(phi,theta,r):
         P[i+1,:]=P[i,:]+Q[i].apply(p[i+1,:])   
     return P,Q
 
+def Camera_Sim(pcdin,position,orientation,xdef,Aspect_ratio,FOV,Noise_level):
+    orientation=orientation/np.linalg.norm(orientation)
+    xmax=np.tan(FOV/2)
+    ymax=np.tan(FOV/(2/Aspect_ratio))
+    ydef=int(xdef*Aspect_ratio)
 
+    xres=2*xmax/xdef
+    yres=2*ymax/ydef
+    pcd2=copy.deepcopy(pcdin)
+    points=np.asarray(pcd2.points)
+    points=points-position
+
+    ctheta=np.dot(orientation,[0,0,1])
+    theta=np.arccos(ctheta)
+
+    rotvec=np.cross(orientation,[0,0,1])/np.linalg.norm(np.cross(orientation,[0,0,1]))
+    rot=Rot.from_rotvec(theta*rotvec)
+
+
+    points=rot.apply(points)
+    #points=points+Camera
+    pcd2.points=o3d.utility.Vector3dVector(points)
+
+    pcd3=copy.deepcopy(pcd2)
+    PointCam=o3d.geometry.PointCloud()
+    PointCam.points=o3d.utility.Vector3dVector([position,position+orientation])
+    PointCam.paint_uniform_color([0,0,0])
+    #o3d.visualization.draw_geometries([pcd,PointCam,pcd2])
+
+    points=np.asarray(pcd3.points)
+
+    points[:,0]=(points[:,0]/points[:,2])
+    points[:,1]=(points[:,1]/points[:,2])
+
+    points[:,0]=(points[:,0]//xres)+xdef/2
+    points[:,1]=points[:,1]//yres+ydef/2
+
+    print('Point sorting')
+    SortedPoints= points[(-points[:,2]).argsort()]
+
+    print('Pixels computation')
+    Pixels=np.ones([xdef,ydef,3])
+    Pixels=Pixels*20
+
+    l=len(SortedPoints)
+    for i in range(l):
+        A=SortedPoints[i,:]
+        if A[0]>=0 and A[1]>=0 and A[0]<xdef and A[0]<ydef:
+            Pixels[int(A[0]),int(A[1]),:]=A
+
+    print('pixel reshape')
+    
+    Pixels=np.reshape(Pixels,(xdef*ydef,3),'F')
+    Pixels[:,0]+= np.full((len(Pixels)),-xdef/2)
+    Pixels[:,1]+= np.full((len(Pixels)),-ydef/2)
+
+    print('spatial transform')
+    points=Pixels
+    pcdCamera=o3d.geometry.PointCloud()
+    pcdCamera.points=o3d.utility.Vector3dVector(points)
+    pcdCamera = pcdCamera.select_by_index(np.where(points[:,2] !=20)[0])
+    points=np.asarray(pcdCamera.points)
+    points[:,0]=points[:,0]*xres*points[:,2]
+    points[:,1]=points[:,1]*yres*points[:,2]
+
+    #insert noise
+
+    points[:,2]+=np.random.normal(0,Noise_level,len(points))
+
+
+    rot=rot.inv()
+    points=rot.apply(points)
+    print('pointcloud creation')
+
+    pcdCamera.points=o3d.utility.Vector3dVector(points)
+    print('2')
+    pcdCamera.translate(position)
+    print('3')
+    return pcdCamera
 
 ###Single segment interpolation ===============================================
 '''
@@ -521,10 +600,10 @@ plt.show()
 
 '''
 print('Arm Generation')
-k=200
-m=1000
+k=100
+m=800
 ray=0.22
-N=2
+N=3
 L=2
 rep=1
 phi,theta,r=PCCrandom(N, L,rep)
@@ -559,91 +638,22 @@ ax.set_zlabel('z')
 ax.set_aspect('equal')
 plt.show()    
 '''
-Camera=np.array([-6,0,0])
+Camera=np.array([-10,0,0])
 Cameradir=np.array([2,0,1])
-Cameradir=Cameradir/np.linalg.norm(Cameradir)
-viewangle=np.pi/3
-ratio=16/9
-xmax=np.tan(viewangle/2)
-ymax=np.tan(viewangle/(2/ratio))
-xdef=1080
-ydef=int(xdef*ratio)
-
-xres=2*xmax/xdef
-yres=2*ymax/ydef
-pcd2=copy.deepcopy(pcd)
-points=np.asarray(pcd2.points)
-points=points-Camera
-
-ctheta=np.dot(Cameradir,[0,0,1])
-theta=np.arccos(ctheta)
-
-rotvec=np.cross(Cameradir,[0,0,1])/np.linalg.norm(np.cross(Cameradir,[0,0,1]))
-rot=Rot.from_rotvec(theta*rotvec)
 
 
-points=rot.apply(points)
-#points=points+Camera
-pcd2.points=o3d.utility.Vector3dVector(points)
+pcdCamera=Camera_Sim(pcd, Camera, Cameradir, 480, 16/9, np.pi/3, 0.05)
+print('4')
+print(len(pcd.points))
+o3d.io.write_point_cloud("Ground_Truth.ply", pcd,write_ascii=True,print_progress=True)
+print('5')
+o3d.io.write_point_cloud("Camera.ply", pcdCamera,write_ascii=True,print_progress=True)
 
-pcd3=copy.deepcopy(pcd2)
-PointCam=o3d.geometry.PointCloud()
-PointCam.points=o3d.utility.Vector3dVector([Camera,Camera+Cameradir])
-PointCam.paint_uniform_color([0,0,0])
-#o3d.visualization.draw_geometries([pcd,PointCam,pcd2])
-
-points=np.asarray(pcd3.points)
-
-points[:,0]=(points[:,0]/points[:,2])
-points[:,1]=(points[:,1]/points[:,2])
-
-points[:,0]=points[:,0]//xres
-points[:,1]=points[:,1]//yres
-
-print('Point sorting')
-SortedPoints= points[(-points[:,2]).argsort()]
-
-print('Pixels computation')
-Pixels=np.ones([xdef,ydef,3])
-Pixels=Pixels*15
-
-
-l=len(SortedPoints)
-for i in range(l):
-    print(i,'/',l)
-    A=SortedPoints[i,:]
-    Pixels[int(A[0]),int(A[1]),:]=A
-
-print('pixel reshape')
-Pixels=np.reshape(Pixels,(xdef*ydef,3),'F')
-
-
-print('spatial transform')
-points=Pixels
-pcdCamera=o3d.geometry.PointCloud()
-pcdCamera.points=o3d.utility.Vector3dVector(points)
-pcdCamera = pcdCamera.select_by_index(np.where(points[:,2] !=15)[0])
-points=np.asarray(pcdCamera.points)
-points[:,0]=points[:,0]*xres*points[:,2]
-points[:,1]=points[:,1]*yres*points[:,2]
-rot=rot.inv()
-points=rot.apply(points)
-B=points
-print('pointcloud creation')
-
-pcdCamera.points=o3d.utility.Vector3dVector(points)
-
-pcdCamera.translate(Camera)
-pcdCamera.estimate_normals()
 
 print('display')
 pcdCamera.paint_uniform_color([0,1,0])
-o3d.visualization.draw_geometries([pcd,PointCam,pcdCamera])
+o3d.visualization.draw_geometries([pcd,pcdCamera])
 
-o3d.io.write_point_cloud("Ground_Truth.ply", pcd)
-o3d.io.write_point_cloud("Camera.ply", pcdCamera)
-
-
-
-
+pcdout=o3d.io.read_point_cloud('Camera.ply')
+o3d.visualization.draw_geometries([pcdout])
 
