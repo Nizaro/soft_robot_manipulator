@@ -86,7 +86,7 @@ class RCylModel(Model):
         self.radius=radius
         
     def make_model(self, P1N):#Compute a cylinder parameter given 2 point and 2 normals
-        R=0.022
+        R=0.22
         
         P2N=P1N[1]
         P1N=P1N[0]
@@ -366,8 +366,8 @@ class Discrete3Dcurve_Length_Start(Model):
                 is_Ends[i]=False
               
         ###Reorganization of points__________________
-        print('start:',self.Start)
-        print('points :', len(input_points))
+        # print('start:',self.Start)
+        # print('points :', len(input_points))
         Porg=input_points
         Porg.pop(max(pop))
         Porg.pop(min(pop))
@@ -392,7 +392,7 @@ class Discrete3Dcurve_Length_Start(Model):
         
         ###CLength Criterion_______________________
         Act_length=geomdl.operations.length_curve(curve)
-        Tolerance=0.1
+        Tolerance=0.2
         if Act_length>self.target_Length*(1-Tolerance) and Act_length<self.target_Length*(1+Tolerance):
             Valid=True
         else:
@@ -485,10 +485,10 @@ def CylinderDipslay(Bestmodel,pcdInliers):
 
 #Application of cylinder RANSAC on each element of a voxelised space
 def Voxelized_Cylinder(points,pcd1,PNL,Mymodel):
-    params=ransac.RansacParams(samples=3, iterations=1000, confidence=0.99999, threshold=0.0005)
-    densit_threshold=500 #Define the limit to compute cylinder in a voxel
+    params=ransac.RansacParams(samples=3, iterations=1000, confidence=0.99999, threshold=0.05)
+    densit_threshold=50 #Define the limit to compute cylinder in a voxel
 
-    size=0.02 #Voxel dimension
+    size=0.2 #Voxel dimension
     densit_threshold*=size
     #voxel grid generation 
     grid=o3d.geometry.VoxelGrid()
@@ -547,7 +547,7 @@ def Voxelized_Cylinder(points,pcd1,PNL,Mymodel):
         pcdi.paint_uniform_color(color)
         pcdVox +=pcdi
         if len(pcdi.points) > np.abs(densit_threshold): #If there is enought point in given voxel compute Cylinder
-            #print('voxel ',i,'/',len(voxels)-1,' computation for ',len(pcdi.points))
+            print('voxel ',i,'/',len(voxels)-1,' computation for ',len(pcdi.points))
             normalsi=np.asarray(pcdi.normals)
             PN=np.array([pointsi,normalsi])
             PN=np.swapaxes(PN,0,1)
@@ -556,7 +556,7 @@ def Voxelized_Cylinder(points,pcd1,PNL,Mymodel):
             
             Inliers,Bestmodel,ratio=pyransac.find_inliers(PNL, Mymodel, params)
             if ratio > 0.8:  #If the cylinder is good enough keep it
-                #print(' ---->   Inlier ratio :',ratio,' Cylinder kept :',len(P)+1)
+                print(' ---->   Inlier ratio :',ratio,' Cylinder kept :',len(P)+1)
                 ratios.append(ratio)
                 #Inlier reformatting
                 Inliers=np.array(Inliers)
@@ -577,10 +577,10 @@ def Voxelized_Cylinder(points,pcd1,PNL,Mymodel):
                 if Punique==True:
                     P.append(Bestmodel.center)
                     Cylinder += Cylinderi
-        #     else:
-        #         print(' ----> Inlier ratio :',ratio,' Cylinder discarded:')
-        # else:
-        #     print('voxel ',i,'/',len(voxels)-1,' skipped',len(pcdi.points))
+            else:
+                print(' ----> Inlier ratio :',ratio,' Cylinder discarded:')
+        else:
+            print('voxel ',i,'/',len(voxels)-1,' skipped',len(pcdi.points))
         pcdInliers.paint_uniform_color([1,0,0])
     print('    ',len(P),'cylinder generated')
     
@@ -649,9 +649,9 @@ def RANSACApprox(P):
 #Curve approximation using ransac with Nurbs model with length criterion
 def RANSACApprox_Length(P):
     print('    Centerline RANSAC estimation')
-    params=ransac.RansacParams(samples=3, iterations=200, confidence=0.7, threshold=0.01)
+    params=ransac.RansacParams(samples=3, iterations=200, confidence=0.9, threshold=0.1)
     Curv=Discrete3Dcurve_Length()
-    Curv.target_Length=42*0.044/5
+    Curv.target_Length=4
     CurvInlier,Curv,CurvRatio=pyransac.find_inliers(P, Curv, params)
     #If RANSAC with length criterion fail try again without criterion
     if Curv.obj==None:
@@ -662,21 +662,22 @@ def RANSACApprox_Length(P):
 
 def RANSACApprox_Length_Start(P,Start):
     print('    Centerline RANSAC estimation')
-    params=ransac.RansacParams(samples=2, iterations=200, confidence=0.7, threshold=0.01)
+    params=ransac.RansacParams(samples=5, iterations=200, confidence=0.7, threshold=0.1)
     Curv=Discrete3Dcurve_Length_Start()
     Curv.Start=Start
-    Curv.target_Length=46*0.044/5
+    Curv.target_Length=6
     CurvInlier,Curv,CurvRatio=pyransac.find_inliers(P, Curv, params)
     #If RANSAC with length criterion fail try again without criterion
     if Curv.obj==None:
-        params=ransac.RansacParams(samples=3, iterations=200, confidence=0.7, threshold=0.01)
+        print('unable to meet hypothesis')
+        params=ransac.RansacParams(samples=9, iterations=200, confidence=0.7, threshold=0.1)
         Curv=Discrete3Dcurve()
         CurvInlier,Curv,CurvRatio=pyransac.find_inliers(P, Curv, params)
     print('    Inliers kept :',len(CurvInlier),'/',len(P)-2)
     return CurvInlier,Curv,CurvRatio
 
 #Generation of cylindrical surface from Nurbs center line
-def Generate_ModelSurf(Curv):
+def Generate_ModelSurf(Curv,r):
         
     curvepoints2=Curv.points
     Curve=Curv.obj
@@ -693,7 +694,6 @@ def Generate_ModelSurf(Curv):
     line_set2.paint_uniform_color([1,0,0])
     
     ###Surface parameter________________________________________________
-    r=0.022 #radius
     N=100   #Point count along the main direction
     K=50    #Point count along the perimeter
     t=np.linspace(0,1,N)
@@ -747,24 +747,26 @@ def Evaluate_model(pcdSurf,Curve,Curvedot,pcd2,pcdInliers):
 
 #Data acquisition ============================================================
 
-DIR='DAta_1_joint/40deg/'
+DIR=''
 img=glob.glob(DIR +'*.ply')
 img_name=copy.deepcopy(img)
 for i in range(len(img)):
     img_name[i]=img_name[i].replace(DIR,'')
     img_name[i]=img_name[i].replace('.ply','')
 
-File=2
+File=0
 File_name=img_name[File]
-pcd0 = o3d.io.read_point_cloud(DIR+File_name+".ply")
-pcd1 = filterDATA(pcd0)
+pcd0 = o3d.io.read_point_cloud('Camera.ply')
+pcd1=pcd0
+#pcd1 = filterDATA(pcd0)
 pcd2=pcd1
-pcd1=pcd1.voxel_down_sample(voxel_size=0.005)
-normal_param=o3d.geometry.KDTreeSearchParamRadius(0.005)
+pcd1=pcd1.voxel_down_sample(voxel_size=0.05)
+normal_param=o3d.geometry.KDTreeSearchParamRadius(0.05)
 pcd1.estimate_normals()
 
-Starts=np.load(DIR+'Start_point.npy')
-Start=Starts[File,0:3]
+
+#Starts=np.load(DIR+'Start_point.npy')
+Start=[0,0,0]
 
 center = pcd1.get_center()
 points = np.asarray(pcd1.points)
@@ -774,7 +776,7 @@ PN=np.swapaxes(PN,0,1)
 PNL=np.ndarray.tolist(PN)
 
 
-o3d.visualization.draw_geometries([pcd1])
+o3d.visualization.draw_geometries([pcd0])
 
 
 #here you can choose between fixed (RCylModel()) and variable (CylModel()) radius for the cylinder research
@@ -873,7 +875,6 @@ P,Cylinder,pcdVox,pcdInliers=Voxelized_Cylinder(points,pcd1,PNL,Mymodel)
 
 
 
-
 #CurvInlier,Curv,CurvRatio=RANSACApprox(P)
 #CurvInlier,Curv,CurvRatio=RANSACApprox_Length(P)
 CurvInlier,Curv,CurvRatio=RANSACApprox_Length_Start(P,Start)
@@ -883,7 +884,7 @@ pcdInlierscenter=o3d.geometry.PointCloud()
 pcdInlierscenter.points=o3d.utility.Vector3dVector(CurvInlier)
 pcdInlierscenter.paint_uniform_color([0,0,1])
 
-pcdSurf,line_set,Curve,Curvedot=Generate_ModelSurf(Curv)
+pcdSurf,line_set,Curve,Curvedot=Generate_ModelSurf(Curv,0.22)
 
 Result_angle,Result_length,Result_mean_Inl_dist,Result_mean_all_dist=Evaluate_model(pcdSurf,Curve,Curvedot, pcd2, pcdInliers)
 
@@ -912,7 +913,7 @@ vis5.add_geometry(line_set)
 vis6.add_geometry(pcdSurf)
 
 
-o3d.visualization.draw_geometries([pcd2,line_set,pcdcenter,pcdSurf])
+o3d.visualization.draw_geometries([pcd1,line_set,pcdcenter,pcdSurf])
 # o3d.visualization.draw_geometries([pcd1,line_set2,pcdcenter,pcdSurf])
 
 
