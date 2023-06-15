@@ -155,9 +155,10 @@ class RCylModel(Model):
 #model for 3D curve (used to find centerline  using ransac on centerpoints)
 class Discrete3Dcurve(Model): 
     
-    def __init__(self, points=None,obj=None):
+    def __init__(self, points=None,obj=None,Radius=None):
         self.points=points
         self.obj=obj
+        self.Radius=Radius
 
     def make_model(self,input_points): #Compute Nurbs given points
         ###Security against duplicate________________
@@ -176,7 +177,7 @@ class Discrete3Dcurve(Model):
             input_points.append((input_points[0]+input_points[1])/2)
             
         ###End points detection______________________ 
-        NeigThreshold=100
+        NeigThreshold=self.Radius*10
         is_neighbour=np.empty([len(input_points)],dtype=bool)
         Ends=[]
         is_Ends=np.empty([len(input_points)],dtype=bool)
@@ -231,9 +232,10 @@ class Discrete3Dcurve(Model):
 #model for 3D curve with criterion on length
 class Discrete3Dcurve_Length(Model):
     
-    def __init__(self, points=None,obj=None,target_Length=None):
+    def __init__(self, points=None,obj=None,Radius=None,target_Length=None):
         self.points=points
         self.obj=obj
+        self.Radius=Radius
         self.target_Length=target_Length
 
     def make_model(self,input_points):
@@ -252,7 +254,7 @@ class Discrete3Dcurve_Length(Model):
         if len(input_points)==2:
             input_points.append((input_points[0]+input_points[1])/2)
             
-        NeigThreshold=100
+        NeigThreshold=self.Radius*10
         is_neighbour=np.empty([len(input_points)],dtype=bool)
         Ends=[]
         is_Ends=np.empty([len(input_points)],dtype=bool)
@@ -314,9 +316,10 @@ class Discrete3Dcurve_Length(Model):
 #model for 3D curve with criterion on length and defined starting point
 class Discrete3Dcurve_Length_Start(Model):
     
-    def __init__(self, points=None,obj=None,target_Length=None,Start=None):
+    def __init__(self, points=None,obj=None,Radius=None,target_Length=None,Start=None):
         self.points=points
         self.obj=obj
+        self.Radius=Radius
         self.target_Length=target_Length
         self.Start=Start
 
@@ -336,7 +339,7 @@ class Discrete3Dcurve_Length_Start(Model):
         #if len(input_points)==2:
         #    input_points.append((input_points[0]+input_points[1])/2)
             
-        NeigThreshold=100
+        NeigThreshold=self.Radius*10
         is_neighbour=np.empty([len(input_points)],dtype=bool)
         Ends=[]
         is_Ends=np.empty([len(input_points)],dtype=bool)
@@ -392,7 +395,7 @@ class Discrete3Dcurve_Length_Start(Model):
         
         ###CLength Criterion_______________________
         Act_length=geomdl.operations.length_curve(curve)
-        Tolerance=0.2
+        Tolerance=0.1
         if Act_length>self.target_Length*(1-Tolerance) and Act_length<self.target_Length*(1+Tolerance):
             Valid=True
         else:
@@ -484,15 +487,27 @@ def CylinderDipslay(Bestmodel,pcdInliers):
     return Cylinder
 
 #Application of cylinder RANSAC on each element of a voxelised space
-def Voxelized_Cylinder(points,pcd1,PNL,Mymodel):
-    params=ransac.RansacParams(samples=3, iterations=1000, confidence=0.99999, threshold=0.05)
+def Voxelized_Cylinder(points,pcd1,PNL,Radius,Est_Noise):
+    
+    Voxel_size=Radius                   
+    
+    if Radius==0 :
+        Mymodel=CylModel()
+        Bestmodel=CylModel()
+    else:
+        Mymodel=RCylModel()
+        Bestmodel=RCylModel()
+        Mymodel.radius=Radius
+        Bestmodel.radius=Radius
+    
+    params=ransac.RansacParams(samples=3, iterations=1000, confidence=0.99999, threshold=Est_Noise)
     densit_threshold=50 #Define the limit to compute cylinder in a voxel
 
-    size=0.2 #Voxel dimension
-    densit_threshold*=size
+    
+    densit_threshold*=Voxel_size 
     #voxel grid generation 
     grid=o3d.geometry.VoxelGrid()
-    grid=grid.create_from_point_cloud(pcd1,voxel_size=size)
+    grid=grid.create_from_point_cloud(pcd1,voxel_size=Voxel_size )
 
     voxels=np.asarray(grid.get_voxels())
     print('    ',len(voxels)-1,' voxels generated with' ,len(points),'points / applied threshold :', densit_threshold, 'points')
@@ -516,32 +531,32 @@ def Voxelized_Cylinder(points,pcd1,PNL,Mymodel):
         X=points[:,0]
         Y=points[:,1]
         Z=points[:,2]
-        pcdi = pcdi.select_by_index(np.where(X < (center[0]+(size/2)))[0])
+        pcdi = pcdi.select_by_index(np.where(X < (center[0]+(Voxel_size /2)))[0])
         pointsi=np.asarray(pcdi.points)
         X=pointsi[:,0]
         Y=pointsi[:,1]
         Z=pointsi[:,2]
-        pcdi = pcdi.select_by_index(np.where(X > (center[0]-(size/2)))[0])
+        pcdi = pcdi.select_by_index(np.where(X > (center[0]-(Voxel_size /2)))[0])
         pointsi=np.asarray(pcdi.points)
         X=pointsi[:,0]
         Y=pointsi[:,1]
         Z=pointsi[:,2]
-        pcdi = pcdi.select_by_index(np.where(Y < (center[1]+(size/2)))[0]) 
+        pcdi = pcdi.select_by_index(np.where(Y < (center[1]+(Voxel_size /2)))[0]) 
         pointsi=np.asarray(pcdi.points)
         X=pointsi[:,0]
         Y=pointsi[:,1]
         Z=pointsi[:,2]
-        pcdi = pcdi.select_by_index(np.where(Y > (center[1]-(size/2)))[0])
+        pcdi = pcdi.select_by_index(np.where(Y > (center[1]-(Voxel_size /2)))[0])
         pointsi=np.asarray(pcdi.points)
         X=pointsi[:,0]
         Y=pointsi[:,1]
         Z=pointsi[:,2]
-        pcdi = pcdi.select_by_index(np.where(Z < (center[2]+(size/2)))[0])
+        pcdi = pcdi.select_by_index(np.where(Z < (center[2]+(Voxel_size /2)))[0])
         pointsi=np.asarray(pcdi.points)
         X=pointsi[:,0]
         Y=pointsi[:,1]
         Z=pointsi[:,2]
-        pcdi = pcdi.select_by_index(np.where(Z > (center[2]-(size/2)))[0])
+        pcdi = pcdi.select_by_index(np.where(Z > (center[2]-(Voxel_size /2)))[0])
         pointsi=np.asarray(pcdi.points)
         color=[random.random(),random.random(),random.random()]
         pcdi.paint_uniform_color(color)
@@ -638,40 +653,45 @@ def DirectApprox(P):
     return curvepoints,pcdE,Curv
 
 #Curve approximation using ransac with Nurbs model
-def RANSACApprox(P):
+def RANSACApprox(P,Est_Noise,Radius,N_seg):
     print('    Centerline RANSAC estimation')
-    params=ransac.RansacParams(samples=3, iterations=100, confidence=0.7, threshold=0.01)
+    params=ransac.RansacParams(samples=N_seg*2-1, iterations=100, confidence=0.7, threshold=Est_Noise)
     Curv=Discrete3Dcurve()
+    Curv.Radius=Radius
     CurvInlier,Curv,CurvRatio=pyransac.find_inliers(P, Curv, params)
     print('    Inliers kept :',len(CurvInlier),'/',len(P)-2)
     return CurvInlier,Curv,CurvRatio
 
 #Curve approximation using ransac with Nurbs model with length criterion
-def RANSACApprox_Length(P):
+def RANSACApprox_Length(P,Est_Noise,Radius,N_seg,L_seg):
     print('    Centerline RANSAC estimation')
-    params=ransac.RansacParams(samples=3, iterations=200, confidence=0.9, threshold=0.1)
+    params=ransac.RansacParams(samples=N_seg*2-1, iterations=200, confidence=0.9, threshold=Est_Noise)
     Curv=Discrete3Dcurve_Length()
-    Curv.target_Length=4
+    Curv.Radius=Radius
+    Curv.target_Length=N_seg*L_seg
     CurvInlier,Curv,CurvRatio=pyransac.find_inliers(P, Curv, params)
     #If RANSAC with length criterion fail try again without criterion
     if Curv.obj==None:
         Curv=Discrete3Dcurve()
+        Curv.Radius=Radius
         CurvInlier,Curv,CurvRatio=pyransac.find_inliers(P, Curv, params)
     print('    Inliers kept :',len(CurvInlier),'/',len(P)-2)
     return CurvInlier,Curv,CurvRatio
 
-def RANSACApprox_Length_Start(P,Start):
+def RANSACApprox_Length_Start(P,Start,Est_Noise,Radius,N_seg,L_seg):
     print('    Centerline RANSAC estimation')
-    params=ransac.RansacParams(samples=5, iterations=200, confidence=0.7, threshold=0.1)
+    params=ransac.RansacParams(samples=N_seg*2-1, iterations=200, confidence=0.85, threshold=Est_Noise)
     Curv=Discrete3Dcurve_Length_Start()
     Curv.Start=Start
-    Curv.target_Length=6
+    Curv.Radius=Radius
+    Curv.target_Length=N_seg*L_seg
     CurvInlier,Curv,CurvRatio=pyransac.find_inliers(P, Curv, params)
     #If RANSAC with length criterion fail try again without criterion
     if Curv.obj==None:
         print('unable to meet hypothesis')
-        params=ransac.RansacParams(samples=9, iterations=200, confidence=0.7, threshold=0.1)
+        params=ransac.RansacParams(samples=N_seg*2-1, iterations=200, confidence=0.7, threshold=Est_Noise)
         Curv=Discrete3Dcurve()
+        Curv.Radius=Radius
         CurvInlier,Curv,CurvRatio=pyransac.find_inliers(P, Curv, params)
     print('    Inliers kept :',len(CurvInlier),'/',len(P)-2)
     return CurvInlier,Curv,CurvRatio
@@ -871,13 +891,16 @@ o3d.visualization.draw_geometries([Cylinder,pcdInliers,pcd1])
 
 ###space partition ===========================================================
 
-P,Cylinder,pcdVox,pcdInliers=Voxelized_Cylinder(points,pcd1,PNL,Mymodel)
+N=3 #number of segment
+L=2 #Length of one segment
+
+P,Cylinder,pcdVox,pcdInliers=Voxelized_Cylinder(points,pcd1,PNL,0.22,0.05)
 
 
 
 #CurvInlier,Curv,CurvRatio=RANSACApprox(P)
 #CurvInlier,Curv,CurvRatio=RANSACApprox_Length(P)
-CurvInlier,Curv,CurvRatio=RANSACApprox_Length_Start(P,Start)
+CurvInlier,Curv,CurvRatio=RANSACApprox_Length_Start(P,Start,0.05,0.22,N,L)
 #curvepoints,pcdE,Curv=DirectApprox(CurvInlier)
 
 pcdInlierscenter=o3d.geometry.PointCloud()
