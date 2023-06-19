@@ -326,6 +326,26 @@ def SmoothConstructPCC(p,L,k,ray,Q,m):
     
     return S
 
+def EndConstruct(P,Q,points,m):
+    Ex=np.array([1,0,0])
+    Ey=np.array([0,1,0])
+
+    N =ray*m//L
+    for a in range(int(N)):
+        if a>0:
+            for b in range(a*7):
+                points.append(P[0]+ray*(a/N)*(np.cos(np.pi*2*b/(a*3))*Ex+np.sin(np.pi*2*b/(a*3))*Ey)) 
+
+    Ex=Q[-1].apply(Ex)       
+    Ey=Q[-1].apply(Ey) 
+              
+    for a in range(int(N)):
+        if a>0:
+            for b in range(a*7):
+                points.append(P[-1]+ray*(a/N)*(np.cos(np.pi*2*b/(a*3))*Ex+np.sin(np.pi*2*b/(a*3))*Ey))          
+      
+    return points
+
 def SegmentedConstruct(p,L,k,ray,nb):
     Ex=np.array([1,0,0])
     Ey=np.array([0,1,0])
@@ -600,11 +620,13 @@ plt.show()
 
 '''
 print('Arm Generation')
-k=100
-m=800
+
+m=400
+
 ray=0.22
 N=3
 L=2
+k=int(m*ray*np.pi*2/L)
 rep=1
 phi,theta,r=PCCrandom(N, L,rep)
 P,Q=General_Construct(phi, theta, r)
@@ -620,8 +642,9 @@ for j in range(N):
         #ax.plot3D(S2[0,l,j,:],S2[1,l,j,:],S2[2,l,j,:],color='r',linestyle='-')
         for i in range(k):
             points.append(S2[:,l,j,i])
-        
-        
+
+points=EndConstruct(P, Q, points, m)
+      
 pcd=o3d.geometry.PointCloud()
 pcd.points = o3d.utility.Vector3dVector(points)
 pcd.paint_uniform_color([1,0,0])
