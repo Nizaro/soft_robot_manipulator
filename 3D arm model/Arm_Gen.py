@@ -459,10 +459,10 @@ def Camera_Sim(pcdin,position,orientation,xdef,Aspect_ratio,FOV,Noise_level):
     points[:,0]=(points[:,0]//xres)+xdef/2
     points[:,1]=points[:,1]//yres+ydef/2
 
-    print('Point sorting')
+    #print('Point sorting')
     SortedPoints= points[(-points[:,2]).argsort()]
 
-    print('Pixels computation')
+    #print('Pixels computation')
     Pixels=np.ones([xdef,ydef,3])
     Pixels=Pixels*20
 
@@ -472,13 +472,13 @@ def Camera_Sim(pcdin,position,orientation,xdef,Aspect_ratio,FOV,Noise_level):
         if A[0]>=0 and A[1]>=0 and A[0]<xdef and A[0]<ydef:
             Pixels[int(A[0]),int(A[1]),:]=A
 
-    print('pixel reshape')
+    #print('pixel reshape')
     
     Pixels=np.reshape(Pixels,(xdef*ydef,3),'F')
     Pixels[:,0]+= np.full((len(Pixels)),-xdef/2)
     Pixels[:,1]+= np.full((len(Pixels)),-ydef/2)
 
-    print('spatial transform')
+    #print('spatial transform')
     points=Pixels
     pcdCamera=o3d.geometry.PointCloud()
     pcdCamera.points=o3d.utility.Vector3dVector(points)
@@ -494,12 +494,12 @@ def Camera_Sim(pcdin,position,orientation,xdef,Aspect_ratio,FOV,Noise_level):
 
     rot=rot.inv()
     points=rot.apply(points)
-    print('pointcloud creation')
+    #print('pointcloud creation')
 
     pcdCamera.points=o3d.utility.Vector3dVector(points)
-    print('2')
+    #print('2')
     pcdCamera.translate(position)
-    print('3')
+    #print('3')
     return pcdCamera
 
 ###Single segment interpolation ===============================================
@@ -619,64 +619,68 @@ ax.set_aspect('equal')
 plt.show()       
 
 '''
-print('Arm Generation')
-
+#print('Arm Generation')
+######General parameters _____________________________________________________
 m=400
-
 ray=0.22
 N=3
 L=2
 k=int(m*ray*np.pi*2/L)
 rep=1
-phi,theta,r=PCCrandom(N, L,rep)
-P,Q=General_Construct(phi, theta, r)
-S,Qn=MultiPCC3D(P, Q,m)
-S2=SmoothConstructPCC(P, Q, k, ray,Q,m)
-points=[]
-
-#ax = plt.axes(projection='3d')
-for j in range(N):
-    
-    for l in range(m):
-        
-        #ax.plot3D(S2[0,l,j,:],S2[1,l,j,:],S2[2,l,j,:],color='r',linestyle='-')
-        for i in range(k):
-            points.append(S2[:,l,j,i])
-
-points=EndConstruct(P, Q, points, m)
-      
-pcd=o3d.geometry.PointCloud()
-pcd.points = o3d.utility.Vector3dVector(points)
-pcd.paint_uniform_color([1,0,0])
-pcd.estimate_normals()
-
-
-'''
-for i in range(N):
-    ax.plot3D(S[:,0,i],S[:,1,i],S[:,2,i])
-
-ax.set_xlabel('x')
-ax.set_ylabel('y')
-ax.set_zlabel('z')
-ax.set_aspect('equal')
-plt.show()    
-'''
 Camera=np.array([-10,0,0])
 Cameradir=np.array([2,0,1])
 
+######iteration parameters ___________________________________________________
 
-pcdCamera=Camera_Sim(pcd, Camera, Cameradir, 480, 16/9, np.pi/3, 0.05)
-print('4')
-print(len(pcd.points))
-o3d.io.write_point_cloud("Ground_Truth.ply", pcd,write_ascii=True,print_progress=True)
-print('5')
-o3d.io.write_point_cloud("Camera.ply", pcdCamera,write_ascii=True,print_progress=True)
+Ntest=20
+Nnoise=4
+NoiseStep=0.05
+NBatch=4
+MainDir='PCC/'
 
+for isegment in range(NBatch):
+    N=isegment+1 
+    localDir=MainDir+str(N)+'_segments/'
+    for iSample in range(Ntest):
+        print('generating image ', iSample+1,'/',Ntest,' of serie ',isegment+1,'/',NBatch)
+        #####Surface generation ______________________________________________________
+        phi,theta,r=PCCrandom(N, L,rep)
+        P,Q=General_Construct(phi, theta, r)
+        S,Qn=MultiPCC3D(P, Q,m)
+        S2=SmoothConstructPCC(P, Q, k, ray,Q,m)
+        points=[]
+        
+        #ax = plt.axes(projection='3d')
+        for j in range(N):
+            
+            for l in range(m):
+                
+                #ax.plot3D(S2[0,l,j,:],S2[1,l,j,:],S2[2,l,j,:],color='r',linestyle='-')
+                for i in range(k):
+                    points.append(S2[:,l,j,i])
+        
+        points=EndConstruct(P, Q, points, m)
+              
+        pcd=o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(points)
+        pcd.paint_uniform_color([1,0,0])
+        pcd.estimate_normals()
+        print('      Ground Truth')
+        o3d.io.write_point_cloud(localDir+str(iSample)+"-Ground_Truth.ply", pcd,write_ascii=True,print_progress=True)
+        
+        #####Camera simulation _______________________________________________________
+        
+        for iNoise in range(Nnoise):
+            print('      Noise level ',iNoise+1,'/',Nnoise)
+        
+            pcdCamera=Camera_Sim(pcd, Camera, Cameradir, 1080, 16/9, np.pi/3, iNoise*NoiseStep)
+            
+            o3d.io.write_point_cloud(localDir+str(iSample)+"-Camera-"+str(iNoise*NoiseStep)+'.ply', pcdCamera,write_ascii=True,print_progress=True)
+            
+            
+            #print('display')
+            #pcdCamera.paint_uniform_color([0,1,0])
+            #o3d.visualization.draw_geometries([pcd,pcdCamera])
+            
 
-print('display')
-pcdCamera.paint_uniform_color([0,1,0])
-o3d.visualization.draw_geometries([pcd,pcdCamera])
-
-pcdout=o3d.io.read_point_cloud('Camera.ply')
-o3d.visualization.draw_geometries([pcdout])
-
+        
