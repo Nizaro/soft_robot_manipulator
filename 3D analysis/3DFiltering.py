@@ -457,7 +457,10 @@ def CylinderDipslay(Bestmodel,pcdInliers):
     alpha=np.arccos(np.dot([0,0,1],D))
     r=np.cross(np.array([0,0,1]),D)/np.linalg.norm(np.cross(np.array([0,0,1]),D)) 
     Rot=rot.from_rotvec(alpha*r)
-    Rinv=Rot.inv()
+    if alpha==0:
+        Rinv=Rot
+    else:
+        Rinv=Rot.inv()
 
     #Center point recomputing
     pcdDir=copy.deepcopy(pcdInliers)
@@ -510,7 +513,7 @@ def Voxelized_Cylinder(points,pcd1,PNL,Radius,Est_Noise):
     grid=grid.create_from_point_cloud(pcd1,voxel_size=Voxel_size )
 
     voxels=np.asarray(grid.get_voxels())
-    print('    ',len(voxels)-1,' voxels generated with' ,len(points),'points / applied threshold :', densit_threshold, 'points')
+    #print('    ',len(voxels)-1,' voxels generated with' ,len(points),'points / applied threshold :', densit_threshold, 'points')
     
     
     X=points[:,0]
@@ -562,7 +565,7 @@ def Voxelized_Cylinder(points,pcd1,PNL,Radius,Est_Noise):
         pcdi.paint_uniform_color(color)
         pcdVox +=pcdi
         if len(pcdi.points) > np.abs(densit_threshold): #If there is enought point in given voxel compute Cylinder
-            print('voxel ',i,'/',len(voxels)-1,' computation for ',len(pcdi.points))
+            #print('voxel ',i,'/',len(voxels)-1,' computation for ',len(pcdi.points))
             normalsi=np.asarray(pcdi.normals)
             PN=np.array([pointsi,normalsi])
             PN=np.swapaxes(PN,0,1)
@@ -571,7 +574,7 @@ def Voxelized_Cylinder(points,pcd1,PNL,Radius,Est_Noise):
             
             Inliers,Bestmodel,ratio=pyransac.find_inliers(PNL, Mymodel, params)
             if ratio > 0.8:  #If the cylinder is good enough keep it
-                print(' ---->   Inlier ratio :',ratio,' Cylinder kept :',len(P)+1)
+                #print(' ---->   Inlier ratio :',ratio,' Cylinder kept :',len(P)+1)
                 ratios.append(ratio)
                 #Inlier reformatting
                 Inliers=np.array(Inliers)
@@ -592,12 +595,12 @@ def Voxelized_Cylinder(points,pcd1,PNL,Radius,Est_Noise):
                 if Punique==True:
                     P.append(Bestmodel.center)
                     Cylinder += Cylinderi
-            else:
-                print(' ----> Inlier ratio :',ratio,' Cylinder discarded:')
-        else:
-            print('voxel ',i,'/',len(voxels)-1,' skipped',len(pcdi.points))
+            #else:
+                #print(' ----> Inlier ratio :',ratio,' Cylinder discarded:')
+        #else:
+            #print('voxel ',i,'/',len(voxels)-1,' skipped',len(pcdi.points))
         pcdInliers.paint_uniform_color([1,0,0])
-    print('    ',len(P),'cylinder generated')
+    #print('    ',len(P),'cylinder generated')
     
     return P,Cylinder,pcdVox,pcdInliers    
     
@@ -714,8 +717,8 @@ def Generate_ModelSurf(Curv,r):
     line_set2.paint_uniform_color([1,0,0])
     
     ###Surface parameter________________________________________________
-    N=100   #Point count along the main direction
-    K=50    #Point count along the perimeter
+    N=300   #Point count along the main direction
+    K=100    #Point count along the perimeter
     t=np.linspace(0,1,N)
     theta=np.linspace(0,2*np.pi,K)
     ###Surface computation _____________________________________________
@@ -751,11 +754,17 @@ def Evaluate_model(pcdSurf,Curve,Curvedot,pcd2,pcdInliers):
     Result_all_dist=np.asarray(Result_all_dist)
     Result_mean_all_dist=np.mean(Result_all_dist)
     Result_dev_all_dist=np.std(Result_all_dist)
+    Result_med_all_dist=np.median(Result_all_dist)
+    Result_1q_all_dist=np.percentile(Result_all_dist, 25)
+    Result_2q_all_dist=np.percentile(Result_all_dist, 75)
     
     Result_Inl_dist=pcdInliers.compute_point_cloud_distance(pcdSurf)  
     Result_Inl_dist=np.asarray(Result_Inl_dist)
     Result_mean_Inl_dist=np.mean(Result_Inl_dist)
     Result_dev_Inl_dist=np.std(Result_Inl_dist)
+    Result_med_Inl_dist=np.median(Result_Inl_dist)
+    Result_1q_Inl_dist=np.percentile(Result_Inl_dist, 25)
+    Result_2q_Inl_dist=np.percentile(Result_Inl_dist, 75)
 
     
     Result_length=geomdl.operations.length_curve(Curve)
@@ -763,10 +772,10 @@ def Evaluate_model(pcdSurf,Curve,Curvedot,pcd2,pcdInliers):
     End_dir=np.asarray(Curvedot.evaluate_single(1))
     Result_angle=np.arcsin(np.linalg.norm(np.cross(End_dir/np.linalg.norm(End_dir),Start_dir/np.linalg.norm(Start_dir))))
     Result_angle*=180/np.pi
-    return Result_angle,Result_length,Result_mean_Inl_dist,Result_mean_all_dist
+    return Result_angle,Result_length,Result_mean_Inl_dist,Result_mean_all_dist,Result_med_Inl_dist,Result_med_all_dist
 
 #Data acquisition ============================================================
-
+'''
 DIR=''
 img=glob.glob(DIR +'*.ply')
 img_name=copy.deepcopy(img)
@@ -776,7 +785,7 @@ for i in range(len(img)):
 
 File=0
 File_name=img_name[File]
-pcd0 = o3d.io.read_point_cloud('Camera.ply')
+pcd0 = o3d.io.read_point_cloud('PCC_Generated/3_segments/12-Camera-0.0.ply')
 pcd1=pcd0
 #pcd1 = filterDATA(pcd0)
 pcd2=pcd1
@@ -802,7 +811,7 @@ o3d.visualization.draw_geometries([pcd0])
 #here you can choose between fixed (RCylModel()) and variable (CylModel()) radius for the cylinder research
 Mymodel=RCylModel()
 Bestmodel=RCylModel()
-
+'''
 ###least squares line=========================================================
 '''
 (center, D3)=findLine(pcd1)
@@ -890,7 +899,7 @@ o3d.visualization.draw_geometries([Cylinder,pcdInliers,pcd1])
 '''
 
 ###space partition ===========================================================
-
+'''
 N=3 #number of segment
 L=2 #Length of one segment
 
@@ -900,7 +909,7 @@ P,Cylinder,pcdVox,pcdInliers=Voxelized_Cylinder(points,pcd1,PNL,0.22,0.05)
 
 #CurvInlier,Curv,CurvRatio=RANSACApprox(P)
 #CurvInlier,Curv,CurvRatio=RANSACApprox_Length(P)
-CurvInlier,Curv,CurvRatio=RANSACApprox_Length_Start(P,Start,0.05,0.22,N,L)
+CurvInlier,Curv,CurvRatio=RANSACApprox_Length_Start(P,Start,0.02,0.22,N,L)
 #curvepoints,pcdE,Curv=DirectApprox(CurvInlier)
 
 pcdInlierscenter=o3d.geometry.PointCloud()
@@ -909,7 +918,7 @@ pcdInlierscenter.paint_uniform_color([0,0,1])
 
 pcdSurf,line_set,Curve,Curvedot=Generate_ModelSurf(Curv,0.22)
 
-Result_angle,Result_length,Result_mean_Inl_dist,Result_mean_all_dist=Evaluate_model(pcdSurf,Curve,Curvedot, pcd2, pcdInliers)
+Result_angle,Result_length,Result_mean_Inl_dist,Result_mean_all_dist,Result_med_Inl_dist,Result_med_all_dist,Result_1q_Inl_dist,Result_1q_all_dist,Result_3q_Inl_dist,Result_3q_all_dist=Evaluate_model(pcdSurf,Curve,Curvedot, pcd2, pcdInliers)
 
 pcdcenter=o3d.geometry.PointCloud()    
 pcdcenter.points=o3d.utility.Vector3dVector(P)
@@ -939,39 +948,58 @@ vis6.add_geometry(pcdSurf)
 o3d.visualization.draw_geometries([pcd1,line_set,pcdcenter,pcdSurf])
 # o3d.visualization.draw_geometries([pcd1,line_set2,pcdcenter,pcdSurf])
 
-
-###Testing ====================================================================
 '''
-DIR="DAta_1_joint/40deg/"
-N=30 #number of test per image
+###Testing ====================================================================
+
+DIR="PCC_Generated2/2_segments/"
+N=20 #number of test per image
 img=glob.glob(DIR +'*.ply')
 img_name=copy.deepcopy(img)
-Starts=np.load(DIR+'Start_point.npy')
 
 Result_angle=np.empty(len(img)*N)
 Result_length=np.empty(len(img)*N)
 Result_mean_Inl_dist=np.empty(len(img)*N)
 Result_mean_all_dist=np.empty(len(img)*N)
+Result_med_Inl_dist=np.empty(len(img)*N)
+Result_med_all_dist=np.empty(len(img)*N)
 Result_Time=np.empty(len(img)*N)
 Test_img=[]
+
+Radius=0.22
+N_Segment=2
+L_Segment=2
+
+N_Test=5
+
 
 print(len(img),' image to test')
 
 for i in range(len(img)):
     img_name[i]=img_name[i].replace(DIR,'')
     img_name[i]=img_name[i].replace('.ply','')
+    
+    if i%N_Test==0 or i%N_Test==2 or i%N_Test==4:
+        Noise=0.05
+    else:
+        if i%N_Test==1:
+            Noise=0.1
+        if i%N_Test==1:
+            Noise=0.15
+    if i%N_Test==0:
+        pcdref=o3d.io.read_point_cloud(img[i+N_Test-1])
+        
     for j in range(N):
         print('Treatment of image ',i+1,'/',len(img),'(',img_name[i],') test ',j+1,'/',N)
         start=timeit.default_timer()
         #acquisition
         pcd0 = o3d.io.read_point_cloud(img[i])
-        pcd1 = filterDATA(pcd0)
+        pcd1 = pcd0
         pcd2=pcd1
-        pcd1=pcd1.voxel_down_sample(voxel_size=0.005)
-        normal_param=o3d.geometry.KDTreeSearchParamRadius(0.005)
+        pcd1=pcd1.voxel_down_sample(voxel_size=0.05)
+        #normal_param=o3d.geometry.KDTreeSearchParamRadius(0.005)
         pcd1.estimate_normals()
-        
-        Start=Starts[i,0:3]
+
+        Start=np.array([0,0,0])
         
         #Setup
         center = pcd1.get_center()
@@ -983,21 +1011,23 @@ for i in range(len(img)):
         Mymodel=RCylModel()
         Bestmodel=RCylModel()
         
+        
         #Computation
-        P,Cylinder,pcdVox,pcdInliers=Voxelized_Cylinder(points,pcd1,PNL,Mymodel)
-        CurvInlier,Curv,CurvRatio=RANSACApprox_Length_Start(P,Start)
-        pcdSurf,line_set,Curve,Curvedot=Generate_ModelSurf(Curv)
+        P,Cylinder,pcdVox,pcdInliers=Voxelized_Cylinder(points,pcd1,PNL,Radius,Noise)
+        CurvInlier,Curv,CurvRatio=RANSACApprox_Length_Start(P,Start,Noise,Radius,N_Segment,L_Segment)
+        pcdSurf,line_set,Curve,Curvedot=Generate_ModelSurf(Curv,Radius)
+
         stop=timeit.default_timer()
         #Analysis
         Test_img.append(img_name[i])
-        Result_angle[i*N+j],Result_length[i*N+j],Result_mean_Inl_dist[i*N+j],Result_mean_all_dist[i*N+j]=Evaluate_model(pcdSurf,Curve,Curvedot, pcd2, pcdInliers)
+        Result_angle[i*N+j],Result_length[i*N+j],Result_mean_Inl_dist[i*N+j],Result_mean_all_dist[i*N+j],Result_med_Inl_dist[i*N+j],Result_med_all_dist[i*N+j]=Evaluate_model(pcdSurf,Curve,Curvedot, pcdref, pcdInliers)
         Result_Time[i*N+j]=stop-start
 
 #Output file 
 with open(DIR+'Test_Length_Start.csv', 'w', newline='') as file:
      writer = csv.writer(file)
      Data=np.array([Test_img,Result_angle,Result_length,Result_mean_Inl_dist,
-                       Result_mean_all_dist,Result_Time])
+                       Result_mean_all_dist,Result_med_Inl_dist,
+                                         Result_med_all_dist,Result_Time])
      
      writer.writerows(Data)
-'''
