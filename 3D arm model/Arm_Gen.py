@@ -13,8 +13,9 @@ import matplotlib.pyplot as plt
 from scipy.optimize import fsolve
 from scipy.spatial.transform import Rotation as Rot
 import random
-import open3d as o3d
+#import open3d as o3d
 import copy
+import csv
 
 
 #First equation to solve to find satisfying PH curves
@@ -279,6 +280,9 @@ def MultiPH3D(p,L):
     Q1=Rot.identity()
     tang=np.empty([3,101,n])
     for i in range(n-1):
+        print('p0',p[:,i])
+        print('p1',p[:,i+1])
+        print('t0',t[:,i])
         (t[:,i+1],r[:,:,i],q[:,i])=PH3D(p[:,i],p[:,i+1],t[:,i],L)
         
         
@@ -400,6 +404,21 @@ def PCCrandom(N,L,rep):
     
     return phi,theta,r
 
+def SymPHrandom(N,L,rep):
+    theta=np.empty([N])
+    phi=np.empty([N])
+    r=np.empty([N])
+    for i in range(N//rep):
+        theta[rep*i]=random.random()*3*np.pi/3
+        phi[rep*i]=random.random()*2*np.pi
+        r[rep*i]=L*((2*np.cos(theta[i])+1)/(np.cos(theta[i])+2))
+        for j in range(rep-1):
+            theta[rep*i+j+1]=theta[rep*i]
+            phi[rep*i+j+1]=phi[rep*i]
+            r[rep*i+j+1]=r[rep*i] 
+
+    return phi,theta,r
+
 def General_Construct(phi,theta,r):
     p=np.empty([len(phi)+1,3])
     P=np.empty([len(phi)+1,3])
@@ -423,6 +442,7 @@ def General_Construct(phi,theta,r):
     return P,Q
 
 def Camera_Sim(pcdin,position,orientation,xdef,Aspect_ratio,FOV,Noise_level):
+    out=0
     orientation=orientation/np.linalg.norm(orientation)
     xmax=np.tan(FOV/2)
     ymax=np.tan(FOV/(2/Aspect_ratio))
@@ -471,6 +491,8 @@ def Camera_Sim(pcdin,position,orientation,xdef,Aspect_ratio,FOV,Noise_level):
         A=SortedPoints[i,:]
         if A[0]>=0 and A[1]>=0 and A[0]<xdef and A[0]<ydef:
             Pixels[int(A[0]),int(A[1]),:]=A
+        else :
+            out+=1
 
     #print('pixel reshape')
     
@@ -484,12 +506,13 @@ def Camera_Sim(pcdin,position,orientation,xdef,Aspect_ratio,FOV,Noise_level):
     pcdCamera.points=o3d.utility.Vector3dVector(points)
     pcdCamera = pcdCamera.select_by_index(np.where(points[:,2] !=20)[0])
     points=np.asarray(pcdCamera.points)
-    points[:,0]=points[:,0]*xres*points[:,2]
-    points[:,1]=points[:,1]*yres*points[:,2]
-
     #insert noise
 
     points[:,2]+=np.random.normal(0,Noise_level,len(points))
+    points[:,0]=points[:,0]*xres*points[:,2]
+    points[:,1]=points[:,1]*yres*points[:,2]
+
+    
 
 
     rot=rot.inv()
@@ -500,7 +523,7 @@ def Camera_Sim(pcdin,position,orientation,xdef,Aspect_ratio,FOV,Noise_level):
     #print('2')
     pcdCamera.translate(position)
     #print('3')
-    return pcdCamera
+    return pcdCamera,out
 
 ###Single segment interpolation ===============================================
 '''
@@ -583,10 +606,10 @@ ax.set_aspect('equal')
 plt.show()
 '''
 ###surface construction =======================================================
-'''
+
 ax = plt.axes(projection='3d')
 L=2
-n=3
+n=1
 k=30
 ray=0.25
 p=np.empty([3,n+1])
@@ -600,16 +623,22 @@ x[:,0]=np.array([1,0,0])
 y[:,0]=np.array([0,1,0])
 t[:,0]=np.array([0,0,1])
 p[:,0]=np.array([0,0,0])
-
+'''
 p[:,1]=np.array([0.5,0.7,1.7])
 p[:,2]=np.array([-0.6,0.5,3])
 p[:,3]=np.array([0,-0.8,3.8])
 #p[:,4]=np.array([1,0.5,3.5])
-S1=SmoothConstruct(p, L, k, ray)
-S2=SegmentedConstruct(p, L, k, ray,4)
+'''
+
+phi,theta,r=SymPHrandom(n, L, 1)
+p,Q=General_Construct(phi, theta, r)
+print('p',p)
+print('p t',np.transpose(p))
+S1=SmoothConstruct(np.transpose(p), L, k, ray)
+#S2=SegmentedConstruct(p, L, k, ray,4)
 for j in range(n):
-    for l in range(20):
-        ax.plot3D(S1[0,l*5,j,:],S1[1,l*5,j,:],S1[2,l*5,j,:],color='b',linestyle='-')
+    for l in range(50):
+        ax.plot3D(S1[0,l*2,j,:],S1[1,l*2,j,:],S1[2,l*2,j,:],color='b',linestyle='-')
         #ax.plot3D(S2[0,l*5,j,:],S2[1,l*5,j,:],S2[2,l*5,j,:],color='r',linestyle='-')
 
 ax.set_xlabel('x')
@@ -618,16 +647,26 @@ ax.set_zlabel('z')
 ax.set_aspect('equal')
 plt.show()       
 
-'''
+
 #print('Arm Generation')
+
+
+
+
+
+
+
+
+
 ######General parameters _____________________________________________________
+'''
 m=400
 ray=0.22
 N=3
 L=2
 k=int(m*ray*np.pi*2/L)
 rep=1
-Camera=np.array([-10,0,0])
+Camera=np.array([-12,0,0])
 Cameradir=np.array([2,0,1])
 
 ######iteration parameters ___________________________________________________
@@ -637,7 +676,8 @@ Nnoise=4
 NoiseStep=0.05
 NBatch=4
 MainDir='PCC/'
-
+Lout=np.empty([Ntest*Nnoise])
+Lname=np.empty([Ntest*Nnoise],dtype=str)
 for isegment in range(NBatch):
     N=isegment+1 
     localDir=MainDir+str(N)+'_segments/'
@@ -673,14 +713,23 @@ for isegment in range(NBatch):
         for iNoise in range(Nnoise):
             print('      Noise level ',iNoise+1,'/',Nnoise)
         
-            pcdCamera=Camera_Sim(pcd, Camera, Cameradir, 1080, 16/9, np.pi/3, iNoise*NoiseStep)
-            
+            pcdCamera,out=Camera_Sim(pcd, Camera, Cameradir, 1080, 16/9, np.pi/3, iNoise*NoiseStep)
+            Lout[iSample*Nnoise+iNoise]=out
+            name=str(iSample)+"-Camera-"+str(iNoise*NoiseStep)
+            Lname[iSample*Nnoise+iNoise]=name
+            print(str(iSample)+"-Camera-"+str(iNoise*NoiseStep))
             o3d.io.write_point_cloud(localDir+str(iSample)+"-Camera-"+str(iNoise*NoiseStep)+'.ply', pcdCamera,write_ascii=True,print_progress=True)
             
             
             #print('display')
             #pcdCamera.paint_uniform_color([0,1,0])
             #o3d.visualization.draw_geometries([pcd,pcdCamera])
-            
+        with open(localDir+'Out_of_Camera.csv', 'w', newline='') as file:
+             writer = csv.writer(file)
+             Data=np.array([Lname,Lout])
+             
+             writer.writerows(Data)
+'''
+        
 
         
