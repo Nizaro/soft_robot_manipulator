@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Tue Jul 18 16:12:40 2023
+Created on Wed Jul 19 18:37:25 2023
 
 @author: leo
 """
+
 import numpy as np
 import open3d as o3d
 from pyransac.base import Model
@@ -45,23 +46,21 @@ Start_tang=np.array([0,0,1])
 Start_normal=np.array([1,0,0])
 Length=L
 
-#Variable setup
-Circle_Points=[Start_point]
-Circle_tang=[Start_tang]
+# #Variable setup
+# Circle_Points=[Start_point]
+# Circle_tang=[Start_tang]
+# Input_Points=P
+
+# End_point=Start_point
+# End_tang=Start_tang
+
+# for i in range(N):
+#     End_point,End_tang,PointInliers,Input_Points=PCCRegresion(Input_Points, Length, End_point,End_tang)
+#     End_point=End_point[0,:]
+#     Circle_Points.append(End_point)
+#     Circle_tang.append(End_tang)
 Input_Points=P
-
-#First section computation ====================================================
-End_point,End_tang,PointInliers,Input_Points=PCCRegresion(Input_Points, Length, Start_point, Start_tang)
-End_point=End_point[0,:]
-Circle_Points.append(End_point)
-Circle_tang.append(End_tang)
-
-#Second section computation ===================================================
-End_point,End_tang,PointInlier2,Input_Point2=PCCRegresion(Input_Points, Length, End_point,End_tang)
-End_point=End_point[0,:]
-Circle_Points.append(End_point)
-Circle_tang.append(End_tang)
-    
+Circle_Points, Circle_tang=MultiPCCRegression(Input_Points, Length, Start_point, Start_tang, N)
 
 #Display
 linepoints=[Start_point,2*Start_tang,Start_normal,Circle_Points[1],Circle_Points[1]+Circle_tang[1],Circle_Points[2],Circle_Points[2]+Circle_tang[2]]
@@ -76,16 +75,13 @@ pcd=o3d.geometry.PointCloud()
 pcd.points=o3d.utility.Vector3dVector(P)
 pcd.paint_uniform_color([1,0,1])
 pcd1=o3d.geometry.PointCloud()
-pcd1.points=o3d.utility.Vector3dVector(PointInliers)
-pcd1.paint_uniform_color([1,0,0])
-pcd2=o3d.geometry.PointCloud()
-pcd2.points=o3d.utility.Vector3dVector(Input_Points)
-pcd2.paint_uniform_color([0,1,0])
-pcd3=o3d.geometry.PointCloud()
-pcd3.points=o3d.utility.Vector3dVector(Input_Point2)
-pcd3.paint_uniform_color([0,0,1])
+# pcd1.points=o3d.utility.Vector3dVector(PointInliers)
+# pcd1.paint_uniform_color([1,0,0])
+# pcd2=o3d.geometry.PointCloud()
+# pcd2.points=o3d.utility.Vector3dVector(Input_Points)
+# pcd2.paint_uniform_color([0,1,0])
 
 
-o3d.visualization.draw_geometries([pcd2,line_set,pcd0,pcd1,pcd3])
 
+o3d.visualization.draw_geometries([line_set,pcd0,pcd])
 
