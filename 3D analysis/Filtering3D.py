@@ -208,11 +208,13 @@ class Discrete3Dcurve(Model):
                 
         ###Reorganization of points__________________
         Porg=input_points
-        Porg.pop(max(pop))
-        Porg.pop(min(pop))
-        Porg.append(Ends[0])
-        Porg.reverse()
-        Porg.append(Ends[-1])
+        if len(pop)>0:
+            Porg.pop(max(pop))
+            if len(Porg)>min(pop):
+                Porg.pop(min(pop))
+            Porg.append(Ends[0])
+            Porg.reverse()
+            Porg.append(Ends[-1])
         
         ###Curve interpolation_______________________
         curve=interpolate_curve(input_points,len(input_points)-1)
@@ -285,11 +287,13 @@ class Discrete3Dcurve_Length(Model):
               
         ###Reorganization of points__________________
         Porg=input_points
-        Porg.pop(max(pop))
-        Porg.pop(min(pop))
-        Porg.append(Ends[0])
-        Porg.reverse()
-        Porg.append(Ends[-1])
+        if len(pop)>0:
+            Porg.pop(max(pop))
+            if len(Porg)>min(pop):
+                Porg.pop(min(pop))
+            Porg.append(Ends[0])
+            Porg.reverse()
+            Porg.append(Ends[-1])
         
         ###Curve interpolation_______________________
         curve=interpolate_curve(input_points,len(input_points)-1)
@@ -372,19 +376,21 @@ class Discrete3Dcurve_Length_Start(Model):
         # print('start:',self.Start)
         # print('points :', len(input_points))
         Porg=input_points
-        Porg.pop(max(pop))
-        Porg.pop(min(pop))
-        Porg.append(Ends[0])
-        Porg.reverse()
-        Porg.append(Ends[-1])
-        Dstart=np.linalg.norm(self.Start-Porg[0])
-        Dend=np.linalg.norm(self.Start-Porg[-1])
-        if Dend<Dstart:
-            Porg.append(self.Start)
-        else:
+        if len(pop)>0:
+            Porg.pop(max(pop))
+            if len(Porg)>min(pop):
+                Porg.pop(min(pop))
+            Porg.append(Ends[0])
             Porg.reverse()
-            Porg.append(self.Start)
-        Porg.reverse()
+            Porg.append(Ends[-1])
+            Dstart=np.linalg.norm(self.Start-Porg[0])
+            Dend=np.linalg.norm(self.Start-Porg[-1])
+            if Dend<Dstart:
+                Porg.append(self.Start)
+            else:
+                Porg.reverse()
+                Porg.append(self.Start)
+            Porg.reverse()
 
         
         ###Curve interpolation_______________________
@@ -409,6 +415,28 @@ class Discrete3Dcurve_Length_Start(Model):
         err=min(np.sqrt(dists[0,:]**2+dists[1,:]**2+dists[2,:]**2))
         return err
 
+#Class for ransac computation of PCC Endpoint of a section given a set of point along the section
+class PCCregression(Model):
+    
+    def __init__(self, Point=None,Start_point=None,start_tang=None,start_normal=None,Length=None,End_point=None):
+        self.Point=Point
+        self.Start_point=Start_point
+        self.start_tang=start_tang
+        self.start_normal=start_normal
+        self.Length=Length
+        self.End_point=End_point
+        
+    def make_model(self,input_points):
+        self.End_point,Valid=PCCinversion(self.Start_point, self.Start_tang, self.Start_normal, self.Length, input_points)
+        return Valid
+    
+    def calc_error(self, point):
+        point=np.array([point])
+        End_point,Valid=PCCinversion(self.Start_point, self.Start_tang, self.Start_normal, self.Length, point)
+        err=np.linalg.norm(End_point-self.End_point)
+        return err
+
+    
 #Input data treatment to focus on studied object
 def filterDATA(pcd0):
     #Far point removal
@@ -492,7 +520,7 @@ def CylinderDipslay(Bestmodel,pcdInliers):
 #Application of cylinder RANSAC on each element of a voxelised space
 def Voxelized_Cylinder(points,pcd1,PNL,Radius,Est_Noise):
     
-    Voxel_size=Radius                   
+    Voxel_size=max(Radius,3*Est_Noise)                   
     
     if Radius==0 :
         Mymodel=CylModel()
@@ -600,7 +628,7 @@ def Voxelized_Cylinder(points,pcd1,PNL,Radius,Est_Noise):
         #else:
             #print('voxel ',i,'/',len(voxels)-1,' skipped',len(pcdi.points))
         pcdInliers.paint_uniform_color([1,0,0])
-    #print('    ',len(P),'cylinder generated')
+    print('    ',len(P),'cylinder generated')
     
     return P,Cylinder,pcdVox,pcdInliers    
     
@@ -658,7 +686,7 @@ def DirectApprox(P):
 #Curve approximation using ransac with Nurbs model
 def RANSACApprox(P,Est_Noise,Radius,N_seg):
     print('    Centerline RANSAC estimation')
-    params=ransac.RansacParams(samples=N_seg*2-1, iterations=100, confidence=0.7, threshold=Est_Noise)
+    params=ransac.RansacParams(samples=max(N_seg*2,3), iterations=100, confidence=0.7, threshold=Est_Noise)
     Curv=Discrete3Dcurve()
     Curv.Radius=Radius
     CurvInlier,Curv,CurvRatio=pyransac.find_inliers(P, Curv, params)
@@ -668,7 +696,7 @@ def RANSACApprox(P,Est_Noise,Radius,N_seg):
 #Curve approximation using ransac with Nurbs model with length criterion
 def RANSACApprox_Length(P,Est_Noise,Radius,N_seg,L_seg):
     print('    Centerline RANSAC estimation')
-    params=ransac.RansacParams(samples=N_seg*2-1, iterations=200, confidence=0.9, threshold=Est_Noise)
+    params=ransac.RansacParams(samples=max(N_seg*2,3), iterations=200, confidence=0.9, threshold=Est_Noise)
     Curv=Discrete3Dcurve_Length()
     Curv.Radius=Radius
     Curv.target_Length=N_seg*L_seg
@@ -683,7 +711,7 @@ def RANSACApprox_Length(P,Est_Noise,Radius,N_seg,L_seg):
 
 def RANSACApprox_Length_Start(P,Start,Est_Noise,Radius,N_seg,L_seg):
     print('    Centerline RANSAC estimation')
-    params=ransac.RansacParams(samples=N_seg*2-1, iterations=200, confidence=0.85, threshold=Est_Noise)
+    params=ransac.RansacParams(samples=max(N_seg*2-1,3), iterations=200, confidence=0.7, threshold=Est_Noise)
     Curv=Discrete3Dcurve_Length_Start()
     Curv.Start=Start
     Curv.Radius=Radius
@@ -692,7 +720,7 @@ def RANSACApprox_Length_Start(P,Start,Est_Noise,Radius,N_seg,L_seg):
     #If RANSAC with length criterion fail try again without criterion
     if Curv.obj==None:
         print('unable to meet hypothesis')
-        params=ransac.RansacParams(samples=N_seg*2-1, iterations=200, confidence=0.7, threshold=Est_Noise)
+        params=ransac.RansacParams(samples=max(N_seg*2,3), iterations=200, confidence=0.7, threshold=Est_Noise)
         Curv=Discrete3Dcurve()
         Curv.Radius=Radius
         CurvInlier,Curv,CurvRatio=pyransac.find_inliers(P, Curv, params)
@@ -744,7 +772,7 @@ def Generate_ModelSurf(Curv,r):
     #o3d surface object creation
     pcdSurf=o3d.geometry.PointCloud()    
     pcdSurf.points=o3d.utility.Vector3dVector(Surf_Points)
-    pcdSurf.paint_uniform_color([0,0,0.7])
+    pcdSurf.paint_uniform_color([0,0,1])
     pcdSurf.estimate_normals()
     return pcdSurf,line_set2,Curve,Curvedot
 
@@ -757,14 +785,16 @@ def Evaluate_model(pcdSurf,Curve,Curvedot,pcd2,pcdInliers):
     Result_med_all_dist=np.median(Result_all_dist)
     Result_1q_all_dist=np.percentile(Result_all_dist, 25)
     Result_2q_all_dist=np.percentile(Result_all_dist, 75)
+    Result_Max_all_Dist=max(Result_all_dist)
     
-    Result_Inl_dist=pcdInliers.compute_point_cloud_distance(pcdSurf)  
+    Result_Inl_dist=pcdSurf.compute_point_cloud_distance(pcd2)  
     Result_Inl_dist=np.asarray(Result_Inl_dist)
     Result_mean_Inl_dist=np.mean(Result_Inl_dist)
     Result_dev_Inl_dist=np.std(Result_Inl_dist)
     Result_med_Inl_dist=np.median(Result_Inl_dist)
     Result_1q_Inl_dist=np.percentile(Result_Inl_dist, 25)
     Result_2q_Inl_dist=np.percentile(Result_Inl_dist, 75)
+    Result_Max_Inl_Dist=max(Result_Inl_dist)
 
     
     Result_length=geomdl.operations.length_curve(Curve)
@@ -772,7 +802,34 @@ def Evaluate_model(pcdSurf,Curve,Curvedot,pcd2,pcdInliers):
     End_dir=np.asarray(Curvedot.evaluate_single(1))
     Result_angle=np.arcsin(np.linalg.norm(np.cross(End_dir/np.linalg.norm(End_dir),Start_dir/np.linalg.norm(Start_dir))))
     Result_angle*=180/np.pi
-    return Result_angle,Result_length,Result_mean_Inl_dist,Result_mean_all_dist,Result_med_Inl_dist,Result_med_all_dist
+    return Result_angle,Result_length,Result_mean_Inl_dist,Result_mean_all_dist,Result_med_Inl_dist,Result_med_all_dist,Result_dev_all_dist,Result_dev_Inl_dist,Result_Max_Inl_Dist,Result_Max_all_Dist
+
+
+#Compute endpoint of section for a sample point along the section
+def PCCinversion(Start_point,Start_tang,Start_normal,Length,Input_point):
+    Dist=Input_point-Start_point
+    Start_conormal=np.cross(Start_tang,Start_normal)
+    Alpha=np.arccos(np.dot(Dist,Start_tang)/(np.linalg.norm(Dist))) #Computation of deviation from starting tangent
+    if np.linalg.norm(Dist) > 2*(np.sin(Alpha)/(Alpha)): #Rejection of point to far to be part of the section
+        Valid=False
+        rand=np.array([random.random(),random.random(),random.random()])
+        End_point=Start_point+Length*(rand+[1,1,1])
+    else :
+        Valid=True
+        if Alpha==0: #Trivial case 
+            End_point=Start_point+Length*Start_tang/np.linalg.norm(Start_tang)
+        else :
+            #Geometric parameter computation
+            Theta=Length*0.5*np.sin(Alpha)/np.linalg.norm(Dist)
+            Phi_vector=np.cross(Start_tang,np.cross(Dist/np.linalg.norm(Dist),Start_tang)[0,:])
+            Phi_vector=Phi_vector/np.linalg.norm(Phi_vector)
+            Phi=np.arccos(np.dot(Start_normal,Phi_vector))
+            Phi2=np.arcsin(np.linalg.norm(Phi_vector))
+            Phi=Phi*np.sign(Phi2)
+            #End point reconstruction
+            End_point=Start_point+Length*(np.sin(2*Theta)/(2*Theta))*(Start_tang*np.cos(2*Theta)+np.sin(2*Theta)*Phi_vector)
+            print('Alpha:',Alpha,'Theta:',Theta)
+    return End_point , Valid
 
 #Data acquisition ============================================================
 '''
@@ -785,17 +842,23 @@ for i in range(len(img)):
 
 File=0
 File_name=img_name[File]
-pcd0 = o3d.io.read_point_cloud('PCC_Generated/3_segments/12-Camera-0.0.ply')
+'''
+'''
+pcd0 = o3d.io.read_point_cloud('PCC_Generated2/3_segments/0-Camera-0.0.ply')
+pcdGT= o3d.io.read_point_cloud('PCC_Generated2/3_segments/0-Ground_Truth.ply')
 pcd1=pcd0
+Start=np.array([0,0,0])
+pcd1=pcd1.rotate(pcd1.get_rotation_matrix_from_xyz((-0.4 * np.pi,0,-0.2*np.pi )),center=Start)
 #pcd1 = filterDATA(pcd0)
 pcd2=pcd1
 pcd1=pcd1.voxel_down_sample(voxel_size=0.05)
+pcdGT=pcdGT.voxel_down_sample(voxel_size=0.02)
 normal_param=o3d.geometry.KDTreeSearchParamRadius(0.05)
 pcd1.estimate_normals()
 
 
 #Starts=np.load(DIR+'Start_point.npy')
-Start=[0,0,0]
+
 
 center = pcd1.get_center()
 points = np.asarray(pcd1.points)
@@ -805,7 +868,7 @@ PN=np.swapaxes(PN,0,1)
 PNL=np.ndarray.tolist(PN)
 
 
-o3d.visualization.draw_geometries([pcd0])
+o3d.visualization.draw_geometries([pcd0,pcdGT])
 
 
 #here you can choose between fixed (RCylModel()) and variable (CylModel()) radius for the cylinder research
@@ -909,7 +972,7 @@ P,Cylinder,pcdVox,pcdInliers=Voxelized_Cylinder(points,pcd1,PNL,0.22,0.05)
 
 #CurvInlier,Curv,CurvRatio=RANSACApprox(P)
 #CurvInlier,Curv,CurvRatio=RANSACApprox_Length(P)
-CurvInlier,Curv,CurvRatio=RANSACApprox_Length_Start(P,Start,0.02,0.22,N,L)
+CurvInlier,Curv,CurvRatio=RANSACApprox_Length_Start(P,Start,0.03,0.22,N,L)
 #curvepoints,pcdE,Curv=DirectApprox(CurvInlier)
 
 pcdInlierscenter=o3d.geometry.PointCloud()
@@ -918,7 +981,7 @@ pcdInlierscenter.paint_uniform_color([0,0,1])
 
 pcdSurf,line_set,Curve,Curvedot=Generate_ModelSurf(Curv,0.22)
 
-Result_angle,Result_length,Result_mean_Inl_dist,Result_mean_all_dist,Result_med_Inl_dist,Result_med_all_dist,Result_1q_Inl_dist,Result_1q_all_dist,Result_3q_Inl_dist,Result_3q_all_dist=Evaluate_model(pcdSurf,Curve,Curvedot, pcd2, pcdInliers)
+#Result_angle,Result_length,Result_mean_Inl_dist,Result_mean_all_dist,Result_med_Inl_dist,Result_med_all_dist,Result_1q_Inl_dist,Result_1q_all_dist,Result_3q_Inl_dist,Result_3q_all_dist=Evaluate_model(pcdSurf,Curve,Curvedot, pcd2, pcdInliers)
 
 pcdcenter=o3d.geometry.PointCloud()    
 pcdcenter.points=o3d.utility.Vector3dVector(P)
@@ -931,6 +994,7 @@ vis3 = o3d.visualization.VisualizerWithEditing()
 vis4 = o3d.visualization.VisualizerWithEditing()
 vis5 = o3d.visualization.VisualizerWithEditing()
 vis6 = o3d.visualization.VisualizerWithEditing()
+vis7 = o3d.visualization.VisualizerWithEditing() 
 vis1.create_window(window_name='Input', width=480, height=300, left=0, top=0)
 vis2.create_window(window_name='Partition', width=480, height=300, left=480, top=0)
 vis3.create_window(window_name='RANSAC Cylinder search', width=480, height=300, left=960, top=0)
@@ -945,16 +1009,20 @@ vis5.add_geometry(line_set)
 vis6.add_geometry(pcdSurf)
 
 
-o3d.visualization.draw_geometries([pcd1,line_set,pcdcenter,pcdSurf])
-# o3d.visualization.draw_geometries([pcd1,line_set2,pcdcenter,pcdSurf])
+
+
+#o3d.visualization.draw_geometries([pcdSurf,pcdSurf],window_name='Generated surface')
+o3d.visualization.draw_geometries([pcdcenter,pcdSurf],window_name='output')
 
 '''
 ###Testing ====================================================================
-
-DIR="PCC_Generated2/2_segments/"
+'''
+DIR="PCC_Generated2/4_segments/"
 N=20 #number of test per image
 img=glob.glob(DIR +'*.ply')
 img_name=copy.deepcopy(img)
+
+lensurf=300*100
 
 Result_angle=np.empty(len(img)*N)
 Result_length=np.empty(len(img)*N)
@@ -962,11 +1030,20 @@ Result_mean_Inl_dist=np.empty(len(img)*N)
 Result_mean_all_dist=np.empty(len(img)*N)
 Result_med_Inl_dist=np.empty(len(img)*N)
 Result_med_all_dist=np.empty(len(img)*N)
+Result_Max_Inl_Dist=np.empty(len(img)*N)
+Result_Max_all_Dist=np.empty(len(img)*N)
 Result_Time=np.empty(len(img)*N)
+Result_dev_all_dist=np.empty(len(img)*N)
+Result_dev_Inl_dist=np.empty(len(img)*N)
+Analysis_dev_inl=np.empty(len(img))
+Analysis_mean_inl=np.empty(len(img))
+
+
+
 Test_img=[]
 
 Radius=0.22
-N_Segment=2
+N_Segment=4
 L_Segment=2
 
 N_Test=5
@@ -978,56 +1055,75 @@ for i in range(len(img)):
     img_name[i]=img_name[i].replace(DIR,'')
     img_name[i]=img_name[i].replace('.ply','')
     
-    if i%N_Test==0 or i%N_Test==2 or i%N_Test==4:
+    if i%N_Test==0 or i%N_Test==1 or i%N_Test==4:
         Noise=0.05
     else:
-        if i%N_Test==1:
+        if i%N_Test==2:
             Noise=0.1
-        if i%N_Test==1:
+        if i%N_Test==3:
             Noise=0.15
     if i%N_Test==0:
         pcdref=o3d.io.read_point_cloud(img[i+N_Test-1])
+    
         
-    for j in range(N):
-        print('Treatment of image ',i+1,'/',len(img),'(',img_name[i],') test ',j+1,'/',N)
-        start=timeit.default_timer()
-        #acquisition
-        pcd0 = o3d.io.read_point_cloud(img[i])
-        pcd1 = pcd0
-        pcd2=pcd1
-        pcd1=pcd1.voxel_down_sample(voxel_size=0.05)
-        #normal_param=o3d.geometry.KDTreeSearchParamRadius(0.005)
-        pcd1.estimate_normals()
-
-        Start=np.array([0,0,0])
-        
-        #Setup
-        center = pcd1.get_center()
-        points = np.asarray(pcd1.points)
-        normals=np.asarray(pcd1.normals)
-        PN=np.array([points,normals])
-        PN=np.swapaxes(PN,0,1)
-        PNL=np.ndarray.tolist(PN)
-        Mymodel=RCylModel()
-        Bestmodel=RCylModel()
-        
-        
-        #Computation
-        P,Cylinder,pcdVox,pcdInliers=Voxelized_Cylinder(points,pcd1,PNL,Radius,Noise)
-        CurvInlier,Curv,CurvRatio=RANSACApprox_Length_Start(P,Start,Noise,Radius,N_Segment,L_Segment)
-        pcdSurf,line_set,Curve,Curvedot=Generate_ModelSurf(Curv,Radius)
-
-        stop=timeit.default_timer()
-        #Analysis
-        Test_img.append(img_name[i])
-        Result_angle[i*N+j],Result_length[i*N+j],Result_mean_Inl_dist[i*N+j],Result_mean_all_dist[i*N+j],Result_med_Inl_dist[i*N+j],Result_med_all_dist[i*N+j]=Evaluate_model(pcdSurf,Curve,Curvedot, pcdref, pcdInliers)
-        Result_Time[i*N+j]=stop-start
-
+    if i%N_Test==0 or i%N_Test==4:
+        for j in range(N):
+            print('Treatment of image ',i+1,'/',len(img),'(',img_name[i],') test ',j+1,'/',N)
+            start=timeit.default_timer()
+            #acquisition
+            pcd0 = o3d.io.read_point_cloud(img[i])
+            pcd1 = pcd0
+            pcd2=pcd1
+            pcd1=pcd1.voxel_down_sample(voxel_size=0.05)
+            #normal_param=o3d.geometry.KDTreeSearchParamRadius(0.005)
+            pcd1.estimate_normals()
+    
+            Start=np.array([0,0,0])
+            
+            #Setup
+            center = pcd1.get_center()
+            points = np.asarray(pcd1.points)
+            normals=np.asarray(pcd1.normals)
+            PN=np.array([points,normals])
+            PN=np.swapaxes(PN,0,1)
+            PNL=np.ndarray.tolist(PN)
+            Mymodel=RCylModel()
+            Bestmodel=RCylModel()
+            
+            
+            #Computation
+            P,Cylinder,pcdVox,pcdInliers=Voxelized_Cylinder(points,pcd1,PNL,Radius,Noise)
+            CurvInlier,Curv,CurvRatio=RANSACApprox_Length_Start(P,Start,Noise,Radius,N_Segment,L_Segment)
+            pcdSurf,line_set,Curve,Curvedot=Generate_ModelSurf(Curv,Radius)
+    
+            stop=timeit.default_timer()
+            #Analysis
+            Test_img.append(img_name[i])
+            Result_angle[i*N+j],Result_length[i*N+j],Result_mean_Inl_dist[i*N+j],Result_mean_all_dist[i*N+j],Result_med_Inl_dist[i*N+j],Result_med_all_dist[i*N+j],Result_dev_all_dist[i*N+j],Result_dev_Inl_dist[i*N+j],Result_Max_Inl_Dist[i*N+j],Result_Max_all_Dist[i*N+j]=Evaluate_model(pcdSurf,Curve,Curvedot, pcdref, pcdInliers)
+            Result_Time[i*N+j]=stop-start
+            if j==0 :
+                Analysis_mean_inl[i]=Result_mean_Inl_dist[i*N+j]
+                Analysis_dev_inl[i]=Result_dev_Inl_dist[i*N+j]
+            else :
+                prev_mean=Analysis_mean_inl[i]
+                Analysis_mean_inl[i]=((j+1)*Analysis_mean_inl[i]+Result_mean_Inl_dist[i*N+j])/(j+2)
+                Analysis_dev_inl[i]=np.sqrt((((j+1)*Analysis_dev_inl[i]**2+Result_dev_Inl_dist[i*N+j]**2)/(j+2))+((j+1)*(prev_mean-Result_mean_Inl_dist[i*N+j])**2/(j+2)**2))
+    else:
+        for j in range(N):
+            Test_img.append(img_name[i])
 #Output file 
 with open(DIR+'Test_Length_Start.csv', 'w', newline='') as file:
      writer = csv.writer(file)
      Data=np.array([Test_img,Result_angle,Result_length,Result_mean_Inl_dist,
                        Result_mean_all_dist,Result_med_Inl_dist,
-                                         Result_med_all_dist,Result_Time])
+                                         Result_med_all_dist,Result_dev_all_dist,Result_dev_Inl_dist,
+                                         Result_Max_Inl_Dist,Result_Max_all_Dist,Result_Time])
      
      writer.writerows(Data)
+
+with open(DIR+'Test_Length_Start_Analysis.csv', 'w', newline='') as file:
+     writer = csv.writer(file)
+     Data=np.array([img_name,Analysis_dev_inl,Analysis_mean_inl])
+     
+     writer.writerows(Data)
+'''
