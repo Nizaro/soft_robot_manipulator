@@ -45,6 +45,7 @@ def find_inliers(points: List, model: Model, params: RansacParams):
     :return: inliers
     """
     inliers = []
+    inliers_ind = []
     max_support = 0
     iterations = params.iterations
     i = 0
@@ -55,12 +56,14 @@ def find_inliers(points: List, model: Model, params: RansacParams):
         sample_points = random.sample(npoints, k=params.samples)
         lpoints= [points[i] for i in sample_points]
         Valid=model.make_model(lpoints)
-        supporters = _find_supporters(points, model, params.threshold)
+        supporters_ind = _find_supporters(points, model, params.threshold)
+        supporters=[points[i] for i in supporters_ind ]
         
 
         if len(supporters) > max_support and Valid==True:
             max_support = len(supporters)
             inliers = supporters
+            inliers_ind=supporters_ind
             best_model=copy.deepcopy(model)
 
             confidence = 1 - params.confidence
@@ -76,8 +79,9 @@ def find_inliers(points: List, model: Model, params: RansacParams):
 
         #print('iteration:',i,'/',iterations,'Ratio:',ratio,' Validity:',Valid)
         i += 1
-
-    return inliers, best_model,ratio
+    outliers_ind=[i for i in range(len(points)) if inliers_ind.count(i)==0]
+    outliers=[points[i] for i in outliers_ind ]
+    return inliers,outliers, best_model,ratio
 
 
 def _find_supporters(points: List, model: Model, threshold: float) -> List:
@@ -88,4 +92,5 @@ def _find_supporters(points: List, model: Model, threshold: float) -> List:
     :param threshold: error threshold to consider data point an inlier
     :return: data points that support the hypothesis
     """
-    return [point for point in points if model.calc_error(point) <= threshold]
+    #return [point for point in points if model.calc_error(point) <= threshold]
+    return [i for i in range(len(points)) if model.calc_error(points[i]) <= threshold]
