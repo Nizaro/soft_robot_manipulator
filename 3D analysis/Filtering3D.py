@@ -10,9 +10,6 @@ import geomdl
 from geomdl.fitting import approximate_curve
 from geomdl.fitting import interpolate_curve
 
-import glob
-import timeit
-import csv
 
 ### Cylinder Model
 class CylModel(Model):
@@ -415,26 +412,22 @@ class Discrete3Dcurve_Length_Start(Model):
         err=min(np.sqrt(dists[0,:]**2+dists[1,:]**2+dists[2,:]**2))
         return err
 
-#Class for ransac computation of PCC Endpoint of a section given a set of point along the section
-class PCCregression(Model):
+
+#Class for ransac computation on one point with passing thru data
+class Point_Wdata(Model):
     
-    def __init__(self, Point=None,Start_point=None,start_tang=None,start_normal=None,Length=None,End_point=None):
+    def __init__(self, Point=None):
         self.Point=Point
-        self.Start_point=Start_point
-        self.start_tang=start_tang
-        self.start_normal=start_normal
-        self.Length=Length
-        self.End_point=End_point
+
         
     def make_model(self,input_points):
-        self.End_point,Valid=PCCinversion(self.Start_point, self.Start_tang, self.Start_normal, self.Length, input_points)
-        return Valid
+        self.point=input_points
+        return True
     
-    def calc_error(self, point):
-        point=np.array([point])
-        End_point,Valid=PCCinversion(self.Start_point, self.Start_tang, self.Start_normal, self.Length, point)
-        err=np.linalg.norm(End_point-self.End_point)
+    def calc_error(self, Test_point):
+        err=np.linalg.norm(Test_point[0]-self.point[0])
         return err
+
 
     
 #Input data treatment to focus on studied object
@@ -600,7 +593,7 @@ def Voxelized_Cylinder(points,pcd1,PNL,Radius,Est_Noise):
             PNL=np.ndarray.tolist(PN)
             
             
-            Inliers,Bestmodel,ratio=pyransac.find_inliers(PNL, Mymodel, params)
+            Inliers,Outliers,Bestmodel,ratio=pyransac.find_inliers(PNL, Mymodel, params)
             if ratio > 0.8:  #If the cylinder is good enough keep it
                 #print(' ---->   Inlier ratio :',ratio,' Cylinder kept :',len(P)+1)
                 ratios.append(ratio)
@@ -709,6 +702,7 @@ def RANSACApprox_Length(P,Est_Noise,Radius,N_seg,L_seg):
     print('    Inliers kept :',len(CurvInlier),'/',len(P)-2)
     return CurvInlier,Curv,CurvRatio
 
+#Curve approximation using ransac with Nurbs model with length criterion and known starting point
 def RANSACApprox_Length_Start(P,Start,Est_Noise,Radius,N_seg,L_seg):
     print('    Centerline RANSAC estimation')
     params=ransac.RansacParams(samples=max(N_seg*2-1,3), iterations=200, confidence=0.7, threshold=Est_Noise)
@@ -716,7 +710,7 @@ def RANSACApprox_Length_Start(P,Start,Est_Noise,Radius,N_seg,L_seg):
     Curv.Start=Start
     Curv.Radius=Radius
     Curv.target_Length=N_seg*L_seg
-    CurvInlier,Curv,CurvRatio=pyransac.find_inliers(P, Curv, params)
+    CurvInlier,CurvOutlier,Curv,CurvRatio=pyransac.find_inliers(P, Curv, params)
     #If RANSAC with length criterion fail try again without criterion
     if Curv.obj==None:
         print('unable to meet hypothesis')
@@ -806,9 +800,8 @@ def Evaluate_model(pcdSurf,Curve,Curvedot,pcd2,pcdInliers):
 
 
 #Compute endpoint of section for a sample point along the section
-def PCCinversion(Start_point,Start_tang,Start_normal,Length,Input_point):
+def PCCinversion(Start_point,Start_tang,Length,Input_point):
     Dist=Input_point-Start_point
-    Start_conormal=np.cross(Start_tang,Start_normal)
     Alpha=np.arccos(np.dot(Dist,Start_tang)/(np.linalg.norm(Dist))) #Computation of deviation from starting tangent
     if np.linalg.norm(Dist) > 2*(np.sin(Alpha)/(Alpha)): #Rejection of point to far to be part of the section
         Valid=False
@@ -823,12 +816,75 @@ def PCCinversion(Start_point,Start_tang,Start_normal,Length,Input_point):
             Theta=Length*0.5*np.sin(Alpha)/np.linalg.norm(Dist)
             Phi_vector=np.cross(Start_tang,np.cross(Dist/np.linalg.norm(Dist),Start_tang)[0,:])
             Phi_vector=Phi_vector/np.linalg.norm(Phi_vector)
-            Phi=np.arccos(np.dot(Start_normal,Phi_vector))
-            Phi2=np.arcsin(np.linalg.norm(Phi_vector))
-            Phi=Phi*np.sign(Phi2)
+
             #End point reconstruction
             End_point=Start_point+Length*(np.sin(2*Theta)/(2*Theta))*(Start_tang*np.cos(2*Theta)+np.sin(2*Theta)*Phi_vector)
-            print('Alpha:',Alpha,'Theta:',Theta)
     return End_point , Valid
 
+def PCCRegresion(Input_Points,Length,Start_point,Start_tang):
+    #Variable Setup
+    params=ransac.RansacParams(1, iterations=100, confidence=0.9999, threshold=0.2)
+    PointModel=Point_Wdata()
+    Endpoints=[]
+    NonValid=[]
+
+    #Computation of distances endpoints and sorting of points accordigly
+    for  i in range(len(Input_Points)):
+        newpoint,Valid=PCCinversion(Start_point, Start_tang, Length, np.array([Input_Points[i]]))
+        if Valid==True:
+            Endpoints.append([newpoint,Input_Points[i]])
+        else :
+            NonValid.append(Input_Points[i])
+
+    #Ransac application to reject outlies
+    Inliers,Outliers,Best_Point,ratio=pyransac.find_inliers(Endpoints, PointModel, params)
+    #Variable reshapping
+    In=np.array(Inliers)
+    In=np.swapaxes(In,0,1)
+    Inliers=np.ndarray.tolist(In)
+    EndInliers=Inliers[0]
+    PointInliers=Inliers[1]
+
+    Out=np.array(Outliers)
+    Out=np.swapaxes(Out,0,1)
+    Outliers=np.ndarray.tolist(Out)
+    PointOutliers=Outliers[1]
+
+    #Endpoint computation based on inliers
+    End_point=np.mean(np.array([EndInliers]),axis=1)  
+    
+    #End Tangent computation
+    Dist=End_point-Start_point
+    Phi_vector=np.cross(Start_tang,np.cross(Dist/np.linalg.norm(Dist),Start_tang)[0,:])
+    Phi_vector=Phi_vector/np.linalg.norm(Phi_vector)
+    Theta=np.arccos(np.dot(Dist,Start_tang)/(np.linalg.norm(Dist)))
+    End_Tang=np.cos(2*Theta)*Start_tang+np.sin(2*Theta)*Phi_vector
+    End_Tang=End_Tang/np.linalg.norm(End_Tang)
+    
+    #Repacking of unused points 
+    NonValid=np.array(NonValid)
+    NonValid=np.ndarray.tolist(NonValid)
+    PointOutliers+=NonValid
+
+    for i in range(len(PointOutliers)):
+        PointOutliers[i]=np.array(PointOutliers[i])
+    
+    return(End_point,End_Tang,PointInliers,PointOutliers)
+
+def MultiPCCRegression(Input_Points,Length,Start_point,Start_tang,Nsection):
+    
+    Circle_Points=[Start_point]
+    Circle_tang=[Start_tang]
+
+    End_point=Start_point
+    End_tang=Start_tang
+
+    for i in range(Nsection):
+        End_point,End_tang,PointInliers,Input_Points=PCCRegresion(Input_Points, Length, End_point,End_tang)
+        End_point=End_point[0,:]
+        Circle_Points.append(End_point)
+        Circle_tang.append(End_tang)
+
+    
+    return Circle_Points, Circle_tang
 
