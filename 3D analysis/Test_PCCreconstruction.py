@@ -51,22 +51,17 @@ Circle_tang=[Start_tang]
 Input_Points=P
 
 #First section computation ====================================================
-End_point,End_tang,PointInliers,Input_Points=PCCRegresion(Input_Points, Length, Start_point, Start_tang)
+End_point,End_tang,PointInliers,Input_Points,Phi,Theta,r=PCCRegresion(Input_Points, Length, Start_point, Start_tang,Start_normal)
 End_point=End_point[0,:]
 Circle_Points.append(End_point)
 Circle_tang.append(End_tang)
 
-#Second section computation ===================================================
-End_point,End_tang,PointInlier2,Input_Point2=PCCRegresion(Input_Points, Length, End_point,End_tang)
-End_point=End_point[0,:]
-Circle_Points.append(End_point)
-Circle_tang.append(End_tang)
-    
+
 
 #Display
-linepoints=[Start_point,2*Start_tang,Start_normal,Circle_Points[1],Circle_Points[1]+Circle_tang[1],Circle_Points[2],Circle_Points[2]+Circle_tang[2]]
+linepoints=[Start_point,2*Start_tang,Start_normal,Circle_Points[1],Circle_Points[1]+Circle_tang[1]]
 
-line=[[0,1],[0,2],[3,4],[5,6]]
+line=[[0,1],[0,2],[3,4]]
 line_set = o3d.geometry.LineSet()
 line_set.points = o3d.utility.Vector3dVector(linepoints)
 line_set.lines = o3d.utility.Vector2iVector(line)
@@ -81,11 +76,11 @@ pcd1.paint_uniform_color([1,0,0])
 pcd2=o3d.geometry.PointCloud()
 pcd2.points=o3d.utility.Vector3dVector(Input_Points)
 pcd2.paint_uniform_color([0,1,0])
-pcd3=o3d.geometry.PointCloud()
-pcd3.points=o3d.utility.Vector3dVector(Input_Point2)
-pcd3.paint_uniform_color([0,0,1])
+# pcd3=o3d.geometry.PointCloud()
+# pcd3.points=o3d.utility.Vector3dVector(Input_Point2)
+# pcd3.paint_uniform_color([0,0,1])
 
 
-o3d.visualization.draw_geometries([pcd2,line_set,pcd0,pcd1,pcd3])
+o3d.visualization.draw_geometries([pcd2,line_set,pcd0,pcd1])
 
 

@@ -10,6 +10,8 @@ import geomdl
 from geomdl.fitting import approximate_curve
 from geomdl.fitting import interpolate_curve
 
+rotation=np.dtype(rot)
+
 
 ### Cylinder Model
 class CylModel(Model):
@@ -821,14 +823,16 @@ def PCCinversion(Start_point,Start_tang,Length,Input_point):
             End_point=Start_point+Length*(np.sin(2*Theta)/(2*Theta))*(Start_tang*np.cos(2*Theta)+np.sin(2*Theta)*Phi_vector)
     return End_point , Valid
 
-def PCCRegresion(Input_Points,Length,Start_point,Start_tang):
+
+#Computation of the end point of a circular section based on multiple point along the section (Use RANSAC)
+def PCCRegresion(Input_Points,Length,Start_point,Start_tang,Start_normal):
     #Variable Setup
     params=ransac.RansacParams(1, iterations=100, confidence=0.9999, threshold=0.2)
     PointModel=Point_Wdata()
     Endpoints=[]
     NonValid=[]
 
-    #Computation of distances endpoints and sorting of points accordigly
+    #Computation of distances endpoints and sorting of points accordingly (Far away point are ignored and will be passed for nex steps)
     for  i in range(len(Input_Points)):
         newpoint,Valid=PCCinversion(Start_point, Start_tang, Length, np.array([Input_Points[i]]))
         if Valid==True:
@@ -855,11 +859,26 @@ def PCCRegresion(Input_Points,Length,Start_point,Start_tang):
     
     #End Tangent computation
     Dist=End_point-Start_point
+    
     Phi_vector=np.cross(Start_tang,np.cross(Dist/np.linalg.norm(Dist),Start_tang)[0,:])
     Phi_vector=Phi_vector/np.linalg.norm(Phi_vector)
     Theta=np.arccos(np.dot(Dist,Start_tang)/(np.linalg.norm(Dist)))
     End_Tang=np.cos(2*Theta)*Start_tang+np.sin(2*Theta)*Phi_vector
     End_Tang=End_Tang/np.linalg.norm(End_Tang)
+    
+    #End Normal computation
+    Phi_normal=np.cross(Dist/np.linalg.norm(Dist),Start_tang)[0,:]
+    Phi_normal=Phi_normal/np.linalg.norm(Phi_normal)
+    q=rot.from_rotvec(-Phi_normal*2*Theta)
+    End_normal=q.apply(Start_normal)
+    
+    #Phi computation
+    
+    Phi1=np.arccos(np.dot(Start_normal,Phi_vector))
+    Phi2=np.arcsin(np.linalg.norm(np.cross(Start_normal,Phi_vector)))
+    Phi=Phi1*np.sign(-Phi2)
+    
+    r=Length*np.sin(Theta)/Theta
     
     #Repacking of unused points 
     NonValid=np.array(NonValid)
@@ -868,23 +887,36 @@ def PCCRegresion(Input_Points,Length,Start_point,Start_tang):
 
     for i in range(len(PointOutliers)):
         PointOutliers[i]=np.array(PointOutliers[i])
+        
     
-    return(End_point,End_Tang,PointInliers,PointOutliers)
+    return(End_point,End_Tang,End_normal,PointInliers,PointOutliers,Phi,Theta,r)
 
-def MultiPCCRegression(Input_Points,Length,Start_point,Start_tang,Nsection):
-    
+
+#Application of PCCRegression on lmultiple succesiv sections
+def MultiPCCRegression(Input_Points,Length,Start_point,Start_tang,Nsection,Start_normal):
+    #Setup
     Circle_Points=[Start_point]
     Circle_tang=[Start_tang]
+    Circle_normal=[Start_normal]
+    Phi=np.empty([Nsection])
+    Theta=np.empty([Nsection])
+    r=np.empty([Nsection])
+    
 
     End_point=Start_point
     End_tang=Start_tang
-
-    for i in range(Nsection):
-        End_point,End_tang,PointInliers,Input_Points=PCCRegresion(Input_Points, Length, End_point,End_tang)
-        End_point=End_point[0,:]
+    End_normal=Start_normal
+    
+    for i in range(Nsection): #IUteration for each section
+        #Computation of the section
+        End_point,End_tang,End_normal,PointInliers,Input_Points,Phi[i],Theta[i],r[i]=PCCRegresion(Input_Points, Length, End_point,End_tang,End_normal)
+        End_point=End_point[0,:] # Reformating variable
+        #Saving data
         Circle_Points.append(End_point)
         Circle_tang.append(End_tang)
+        Circle_normal.append(End_normal)
 
     
-    return Circle_Points, Circle_tang
+    return Circle_Points, Circle_tang,Circle_normal,Phi,Theta,r
+
 
