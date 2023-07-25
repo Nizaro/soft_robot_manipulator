@@ -527,7 +527,7 @@ def Voxelized_Cylinder(points,pcd1,PNL,Radius,Est_Noise):
         Bestmodel.radius=Radius
     
     params=ransac.RansacParams(samples=3, iterations=1000, confidence=0.99999, threshold=Est_Noise)
-    densit_threshold=50 #Define the limit to compute cylinder in a voxel
+    densit_threshold=40 #Define the limit to compute cylinder in a voxel
 
     
     densit_threshold*=Voxel_size 
@@ -901,7 +901,9 @@ def MultiPCCRegression(Input_Points,Length,Start_point,Start_tang,Nsection,Start
     Phi=np.empty([Nsection])
     Theta=np.empty([Nsection])
     r=np.empty([Nsection])
-    
+    Qn=np.empty([Nsection+1],dtype=rotation)
+    Qn[0]=rot.from_quat([0,0,0,1])
+
 
     End_point=Start_point
     End_tang=Start_tang
@@ -915,8 +917,16 @@ def MultiPCCRegression(Input_Points,Length,Start_point,Start_tang,Nsection,Start
         Circle_Points.append(End_point)
         Circle_tang.append(End_tang)
         Circle_normal.append(End_normal)
+        
+        rotvec=np.cross(Circle_tang[i],Circle_tang[i+1])
+        rotvec=rotvec/np.linalg.norm(rotvec)
+        theta=np.arccos(np.dot(Circle_tang[i],Circle_tang[i+1]))
+        qn=rot.from_rotvec(theta*rotvec)
+        Qn[i+1]=qn*Qn[i]
+        
+    
 
     
-    return Circle_Points, Circle_tang,Circle_normal,Phi,Theta,r
+    return Circle_Points, Circle_tang,Circle_normal,Phi,Theta,r,Qn
 
 

@@ -15,8 +15,8 @@ from Filtering3D import *
 from Arm_Gen import *
  # Data Acquisition ===========================================================
  
-pcd0 = o3d.io.read_point_cloud('PCC_Generated2/4_segments/9-Camera-0.0.ply')
-pcdGT= o3d.io.read_point_cloud('PCC_Generated2/2_segments/5-Ground_Truth.ply')
+pcd0 = o3d.io.read_point_cloud('PCC_Generated2/4_segments/8-Camera-0.0.ply')
+pcdGT= o3d.io.read_point_cloud('PCC_Generated2/4_segments/8-Ground_Truth.ply')
 pcd1=pcd0
 pcd2=pcd1
 pcd1=pcd1.voxel_down_sample(voxel_size=0.05)
@@ -24,7 +24,7 @@ pcdGT=pcdGT.voxel_down_sample(voxel_size=0.02)
 normal_param=o3d.geometry.KDTreeSearchParamRadius(0.15)
 pcd1.estimate_normals()
 
-
+o3d.visualization.draw_geometries([pcd1])
 center = pcd1.get_center()
 points = np.asarray(pcd1.points)
 normals=np.asarray(pcd1.normals)
@@ -32,8 +32,7 @@ PN=np.array([points,normals])
 PN=np.swapaxes(PN,0,1)
 PNL=np.ndarray.tolist(PN)
 #here you can choose between fixed (RCylModel()) and variable (CylModel()) radius for the cylinder research
-Mymodel=RCylModel()
-Bestmodel=RCylModel()
+
 
 #Center points computation ====================================================
 N=4 #number of segment
@@ -48,11 +47,15 @@ Start_normal=np.array([1,0,0])
 Length=L
 
 Input_Points=P
-Circle_Points, Circle_tang,Circle_normal,Phi,Theta,r=MultiPCCRegression(Input_Points, Length, Start_point, Start_tang, N,Start_normal)
 
-Pn,Qn=General_Construct(Phi, Theta, r)
-m=40
-k=200
+#PCC model computation
+Circle_Points, Circle_tang,Circle_normal,Phi,Theta,r,Qn=MultiPCCRegression(Input_Points, Length, Start_point, Start_tang, N,Start_normal)
+
+
+#Surface generation
+Pn=np.array(Circle_Points)
+m=200
+k=100
 S=SmoothConstructPCC(Pn, Length, k, 0.22, Qn, m)
 points=[]
 for j in range(N):
