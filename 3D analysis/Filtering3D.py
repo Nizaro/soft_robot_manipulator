@@ -821,20 +821,21 @@ def PCCinversion(Start_point,Start_tang,Length,Input_point):
 
             #End point reconstruction
             End_point=Start_point+Length*(np.sin(2*Theta)/(2*Theta))*(Start_tang*np.cos(2*Theta)+np.sin(2*Theta)*Phi_vector)
-    return End_point , Valid
+    return End_point , Valid,Dist[0,:]
 
 
 #Computation of the end point of a circular section based on multiple point along the section (Use RANSAC)
 def PCCRegresion(Input_Points,Length,Start_point,Start_tang,Start_normal):
     #Variable Setup
-    params=ransac.RansacParams(1, iterations=100, confidence=0.9999, threshold=0.2)
+    params=ransac.RansacParams(1, iterations=100, confidence=0.99999, threshold=0.2)
     PointModel=Point_Wdata()
     Endpoints=[]
     NonValid=[]
+    Dists=[]
 
     #Computation of distances endpoints and sorting of points accordingly (Far away point are ignored and will be passed for nex steps)
     for  i in range(len(Input_Points)):
-        newpoint,Valid=PCCinversion(Start_point, Start_tang, Length, np.array([Input_Points[i]]))
+        newpoint,Valid,Dist=PCCinversion(Start_point, Start_tang, Length, np.array([Input_Points[i]]))
         if Valid==True:
             Endpoints.append([newpoint,Input_Points[i]])
         else :
@@ -855,7 +856,15 @@ def PCCRegresion(Input_Points,Length,Start_point,Start_tang,Start_normal):
     PointOutliers=Outliers[1]
 
     #Endpoint computation based on inliers
-    End_point=np.mean(np.array([EndInliers]),axis=1)  
+    #End_point=np.mean(np.array([EndInliers]),axis=1) 
+    
+    Dists=np.linalg.norm(PointInliers-Start_point,axis=1)
+    print(Dists**5)
+    End_point=np.average(np.array([EndInliers]),weights=Dists**4,axis=1) 
+    # for i in range(len(PointInliers)):
+    #     if Dists[i]==max(Dists):
+    #         End_point[0]=np.array(EndInliers[i])
+            
     
     #End Tangent computation
     Dist=End_point-Start_point
@@ -883,13 +892,14 @@ def PCCRegresion(Input_Points,Length,Start_point,Start_tang,Start_normal):
     #Repacking of unused points 
     NonValid=np.array(NonValid)
     NonValid=np.ndarray.tolist(NonValid)
-    PointOutliers+=NonValid
+    #PointOutliers+=NonValid
+    PointOutliers=NonValid
 
     for i in range(len(PointOutliers)):
         PointOutliers[i]=np.array(PointOutliers[i])
         
     
-    return(End_point,End_Tang,End_normal,PointInliers,PointOutliers,Phi,Theta,r)
+    return(End_point,End_Tang,End_normal,PointInliers,PointOutliers,Phi,Theta,r,EndInliers)
 
 
 #Application of PCCRegression on lmultiple succesiv sections
@@ -908,11 +918,13 @@ def MultiPCCRegression(Input_Points,Length,Start_point,Start_tang,Nsection,Start
     End_point=Start_point
     End_tang=Start_tang
     End_normal=Start_normal
+    Inliers=[]
     
     for i in range(Nsection): #IUteration for each section
         #Computation of the section
-        End_point,End_tang,End_normal,PointInliers,Input_Points,Phi[i],Theta[i],r[i]=PCCRegresion(Input_Points, Length, End_point,End_tang,End_normal)
+        End_point,End_tang,End_normal,PointInliers,Input_Points,Phi[i],Theta[i],r[i],EndInliers=PCCRegresion(Input_Points, Length, End_point,End_tang,End_normal)
         End_point=End_point[0,:] # Reformating variable
+        Inliers+=EndInliers
         #Saving data
         Circle_Points.append(End_point)
         Circle_tang.append(End_tang)
@@ -927,6 +939,6 @@ def MultiPCCRegression(Input_Points,Length,Start_point,Start_tang,Nsection,Start
     
 
     
-    return Circle_Points, Circle_tang,Circle_normal,Phi,Theta,r,Qn
+    return Circle_Points, Circle_tang,Circle_normal,Phi,Theta,r,Qn,Inliers
 
 
