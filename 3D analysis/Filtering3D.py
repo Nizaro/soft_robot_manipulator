@@ -427,7 +427,7 @@ class Point_Wdata(Model):
         return True
     
     def calc_error(self, Test_point):
-        err=np.linalg.norm(Test_point[0]-self.point[0])
+        err=np.linalg.norm(Test_point[0]-self.point[0][0])
         return err
 
 
@@ -827,7 +827,7 @@ def PCCinversion(Start_point,Start_tang,Length,Input_point):
 #Computation of the end point of a circular section based on multiple point along the section (Use RANSAC)
 def PCCRegresion(Input_Points,Length,Start_point,Start_tang,Start_normal):
     #Variable Setup
-    params=ransac.RansacParams(1, iterations=100, confidence=0.99999, threshold=0.2)
+    params=ransac.RansacParams(1, iterations=100, confidence=0.99999, threshold=0.22)
     PointModel=Point_Wdata()
     Endpoints=[]
     NonValid=[]
@@ -850,6 +850,7 @@ def PCCRegresion(Input_Points,Length,Start_point,Start_tang,Start_normal):
     EndInliers=Inliers[0]
     PointInliers=Inliers[1]
 
+
     Out=np.array(Outliers)
     Out=np.swapaxes(Out,0,1)
     Outliers=np.ndarray.tolist(Out)
@@ -859,7 +860,6 @@ def PCCRegresion(Input_Points,Length,Start_point,Start_tang,Start_normal):
     #End_point=np.mean(np.array([EndInliers]),axis=1) 
     
     Dists=np.linalg.norm(PointInliers-Start_point,axis=1)
-    print(Dists**5)
     End_point=np.average(np.array([EndInliers]),weights=Dists**4,axis=1) 
     # for i in range(len(PointInliers)):
     #     if Dists[i]==max(Dists):
