@@ -85,7 +85,7 @@ class RCylModel(Model):
         self.radius=radius
         
     def make_model(self, P1N):#Compute a cylinder parameter given 2 point and 2 normals
-        R=0.22
+        R=self.radius
         
         P2N=P1N[1]
         P1N=P1N[0]
@@ -436,20 +436,21 @@ class Point_Wdata(Model):
 def filterDATA(pcd0):
     #Far point removal
     points = np.asarray(pcd0.points)
-    z1_threshold=-0.8
+    z1_threshold=-1
     pcd1 = pcd0.select_by_index(np.where(points[:,2] > z1_threshold)[0])
     
     points = np.asarray(pcd1.points)
-    z2_threshold=-0.1
+    z2_threshold=-0
     pcd1 = pcd1.select_by_index(np.where(points[:,2] < z2_threshold)[0])
     
     points = np.asarray(pcd1.points)
-    x1_threshold=0.2
+    x1_threshold=0.3
     pcd1 = pcd1.select_by_index(np.where(points[:,0] < x1_threshold)[0])
     
     points = np.asarray(pcd1.points)
-    x2_threshold=-0.2
+    x2_threshold=-0.3
     pcd1 = pcd1.select_by_index(np.where(points[:,0] > x2_threshold)[0])
+    
     
     #White point removal
     white_threshold=0.3
@@ -527,10 +528,10 @@ def Voxelized_Cylinder(points,pcd1,PNL,Radius,Est_Noise):
         Bestmodel.radius=Radius
     
     params=ransac.RansacParams(samples=3, iterations=1000, confidence=0.99999, threshold=Est_Noise)
-    densit_threshold=40 #Define the limit to compute cylinder in a voxel
+    densit_threshold=10 #Define the limit to compute cylinder in a voxel
 
     
-    densit_threshold*=Voxel_size 
+    #densit_threshold*=Voxel_size 
     #voxel grid generation 
     grid=o3d.geometry.VoxelGrid()
     grid=grid.create_from_point_cloud(pcd1,voxel_size=Voxel_size )
@@ -719,7 +720,7 @@ def RANSACApprox_Length_Start(P,Start,Est_Noise,Radius,N_seg,L_seg):
         params=ransac.RansacParams(samples=max(N_seg*2,3), iterations=200, confidence=0.7, threshold=Est_Noise)
         Curv=Discrete3Dcurve()
         Curv.Radius=Radius
-        CurvInlier,Curv,CurvRatio=pyransac.find_inliers(P, Curv, params)
+        CurvInlier,out,Curv,CurvRatio=pyransac.find_inliers(P, Curv, params)
     print('    Inliers kept :',len(CurvInlier),'/',len(P)-2)
     return CurvInlier,Curv,CurvRatio
 
@@ -805,7 +806,7 @@ def Evaluate_model(pcdSurf,Curve,Curvedot,pcd2,pcdInliers):
 def PCCinversion(Start_point,Start_tang,Length,Input_point):
     Dist=Input_point-Start_point
     Alpha=np.arccos(np.dot(Dist,Start_tang)/(np.linalg.norm(Dist))) #Computation of deviation from starting tangent
-    if np.linalg.norm(Dist) > 2*(np.sin(Alpha)/(Alpha)): #Rejection of point to far to be part of the section
+    if np.linalg.norm(Dist) > Length*(np.sin(Alpha)/(Alpha)): #Rejection of point to far to be part of the section
         Valid=False
         rand=np.array([random.random(),random.random(),random.random()])
         End_point=Start_point+Length*(rand+[1,1,1])
@@ -842,6 +843,7 @@ def PCCRegresion(Input_Points,Length,Start_point,Start_tang,Start_normal):
             NonValid.append(Input_Points[i])
 
     #Ransac application to reject outlies
+    print("Endpoints : ",len(Endpoints))
     Inliers,Outliers,Best_Point,ratio=pyransac.find_inliers(Endpoints, PointModel, params)
     #Variable reshapping
     In=np.array(Inliers)
@@ -849,12 +851,15 @@ def PCCRegresion(Input_Points,Length,Start_point,Start_tang,Start_normal):
     Inliers=np.ndarray.tolist(In)
     EndInliers=Inliers[0]
     PointInliers=Inliers[1]
+    print("outliers",len(Outliers))
 
-
-    Out=np.array(Outliers)
-    Out=np.swapaxes(Out,0,1)
-    Outliers=np.ndarray.tolist(Out)
-    PointOutliers=Outliers[1]
+    if len(Outliers)==0:
+        PointOutliers=[]
+    else :
+        Out=np.array(Outliers)
+        Out=np.swapaxes(Out,0,1)
+        Outliers=np.ndarray.tolist(Out)
+        PointOutliers=Outliers[1]
 
     #Endpoint computation based on inliers
     #End_point=np.mean(np.array([EndInliers]),axis=1) 

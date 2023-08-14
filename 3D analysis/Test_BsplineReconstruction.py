@@ -23,15 +23,14 @@ File=0
 File_name=img_name[File]
 '''
 '''
-pcd0 = o3d.io.read_point_cloud('PCC_Generated2/3_segments/0-Camera-0.0.ply')
-pcdGT= o3d.io.read_point_cloud('PCC_Generated2/3_segments/0-Ground_Truth.ply')
+pcd0 = o3d.io.read_point_cloud('Record/pc2.ply')
+#pcdGT= o3d.io.read_point_cloud('PCC_Generated2/4_segments/8-Ground_Truth.ply')
 pcd1=pcd0
-Start=np.array([0,0,0])
-pcd1=pcd1.rotate(pcd1.get_rotation_matrix_from_xyz((-0.4 * np.pi,0,-0.2*np.pi )),center=Start)
-#pcd1 = filterDATA(pcd0)
+Start=np.array([0.02,-0.24,-0.430])
+pcd1 = filterDATA(pcd0)
 pcd2=pcd1
-pcd1=pcd1.voxel_down_sample(voxel_size=0.05)
-pcdGT=pcdGT.voxel_down_sample(voxel_size=0.02)
+pcd1=pcd1.voxel_down_sample(voxel_size=0.001)
+#pcdGT=pcdGT.voxel_down_sample(voxel_size=0.02)
 normal_param=o3d.geometry.KDTreeSearchParamRadius(0.05)
 pcd1.estimate_normals()
 
@@ -46,8 +45,7 @@ PN=np.array([points,normals])
 PN=np.swapaxes(PN,0,1)
 PNL=np.ndarray.tolist(PN)
 
-
-o3d.visualization.draw_geometries([pcd0,pcdGT])
+o3d.visualization.draw_geometries([pcd1])
 
 
 #here you can choose between fixed (RCylModel()) and variable (CylModel()) radius for the cylinder research
@@ -57,23 +55,30 @@ Bestmodel=RCylModel()
 
 ###space partition ===========================================================
 
-N=3 #number of segment
-L=2 #Length of one segment
+N=2 #number of segment
 
-P,Cylinder,pcdVox,pcdInliers=Voxelized_Cylinder(points,pcd1,PNL,0.22,0.05)
+radius=0.02
+L=radius*17/2 #Length of one segment
 
+P,Cylinder,pcdVox,pcdInliers=Voxelized_Cylinder(points,pcd1,PNL,radius,radius/5)
 
+pcdcenter=o3d.geometry.PointCloud()    
+pcdcenter.points=o3d.utility.Vector3dVector(P)
+pcdcenter.paint_uniform_color([1,0,0])
+o3d.visualization.draw_geometries([pcdcenter,pcd1])
 
 #CurvInlier,Curv,CurvRatio=RANSACApprox(P)
 #CurvInlier,Curv,CurvRatio=RANSACApprox_Length(P)
-CurvInlier,Curv,CurvRatio=RANSACApprox_Length_Start(P,Start,0.03,0.22,N,L)
+CurvInlier,Curv,CurvRatio=RANSACApprox_Length_Start(P,Start,radius/5,radius,N,L)
 #curvepoints,pcdE,Curv=DirectApprox(CurvInlier)
 
 pcdInlierscenter=o3d.geometry.PointCloud()
 pcdInlierscenter.points=o3d.utility.Vector3dVector(CurvInlier)
 pcdInlierscenter.paint_uniform_color([0,0,1])
 
-pcdSurf,line_set,Curve,Curvedot=Generate_ModelSurf(Curv,0.22)
+
+
+pcdSurf,line_set,Curve,Curvedot=Generate_ModelSurf(Curv,radius)
 
 #Result_angle,Result_length,Result_mean_Inl_dist,Result_mean_all_dist,Result_med_Inl_dist,Result_med_all_dist,Result_1q_Inl_dist,Result_1q_all_dist,Result_3q_Inl_dist,Result_3q_all_dist=Evaluate_model(pcdSurf,Curve,Curvedot, pcd2, pcdInliers)
 
@@ -106,5 +111,5 @@ vis6.add_geometry(pcdSurf)
 
 
 #o3d.visualization.draw_geometries([pcdSurf,pcdSurf],window_name='Generated surface')
-o3d.visualization.draw_geometries([pcdcenter,pcdSurf],window_name='output')
+o3d.visualization.draw_geometries([pcdcenter,pcdSurf,pcd1],window_name='output')
 
