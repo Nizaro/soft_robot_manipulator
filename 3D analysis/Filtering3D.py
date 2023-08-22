@@ -528,7 +528,7 @@ def Voxelized_Cylinder(points,pcd1,PNL,Radius,Est_Noise):
         Bestmodel.radius=Radius
     
     params=ransac.RansacParams(samples=3, iterations=1000, confidence=0.99999, threshold=Est_Noise)
-    densit_threshold=10 #Define the limit to compute cylinder in a voxel
+    densit_threshold=7 #Define the limit to compute cylinder in a voxel
 
     
     #densit_threshold*=Voxel_size 
@@ -828,7 +828,7 @@ def PCCinversion(Start_point,Start_tang,Length,Input_point):
 #Computation of the end point of a circular section based on multiple point along the section (Use RANSAC)
 def PCCRegresion(Input_Points,Length,Start_point,Start_tang,Start_normal):
     #Variable Setup
-    params=ransac.RansacParams(1, iterations=100, confidence=0.99999, threshold=0.22)
+    params=ransac.RansacParams(1, iterations=100, confidence=0.99999, threshold=0.02)
     PointModel=Point_Wdata()
     Endpoints=[]
     NonValid=[]
@@ -843,7 +843,6 @@ def PCCRegresion(Input_Points,Length,Start_point,Start_tang,Start_normal):
             NonValid.append(Input_Points[i])
 
     #Ransac application to reject outlies
-    print("Endpoints : ",len(Endpoints))
     Inliers,Outliers,Best_Point,ratio=pyransac.find_inliers(Endpoints, PointModel, params)
     #Variable reshapping
     In=np.array(Inliers)
@@ -851,7 +850,6 @@ def PCCRegresion(Input_Points,Length,Start_point,Start_tang,Start_normal):
     Inliers=np.ndarray.tolist(In)
     EndInliers=Inliers[0]
     PointInliers=Inliers[1]
-    print("outliers",len(Outliers))
 
     if len(Outliers)==0:
         PointOutliers=[]
@@ -917,7 +915,10 @@ def MultiPCCRegression(Input_Points,Length,Start_point,Start_tang,Nsection,Start
     Theta=np.empty([Nsection])
     r=np.empty([Nsection])
     Qn=np.empty([Nsection+1],dtype=rotation)
-    Qn[0]=rot.from_quat([0,0,0,1])
+    #Qn[0]=rot.from_quat([0,0,0,1])
+    theta=np.arccos(np.dot((Start_tang),[0,0,1])/np.linalg.norm(Start_tang))
+    rotvec=np.cross([0,0,1],Start_tang)/np.linalg.norm(np.cross([0,0,1],Start_tang))
+    Qn[0]=rot.from_rotvec(theta*rotvec)
 
 
     End_point=Start_point
