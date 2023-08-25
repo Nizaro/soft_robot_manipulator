@@ -826,9 +826,9 @@ def PCCinversion(Start_point,Start_tang,Length,Input_point):
 
 
 #Computation of the end point of a circular section based on multiple point along the section (Use RANSAC)
-def PCCRegresion(Input_Points,Length,Start_point,Start_tang,Start_normal):
+def PCCRegresion(Input_Points,Length,Start_point,Start_tang,Start_normal,Radius):
     #Variable Setup
-    params=ransac.RansacParams(1, iterations=100, confidence=0.99999, threshold=0.02)
+    params=ransac.RansacParams(1, iterations=100, confidence=0.99999, threshold=Radius)
     PointModel=Point_Wdata()
     Endpoints=[]
     NonValid=[]
@@ -906,7 +906,7 @@ def PCCRegresion(Input_Points,Length,Start_point,Start_tang,Start_normal):
 
 
 #Application of PCCRegression on lmultiple succesiv sections
-def MultiPCCRegression(Input_Points,Length,Start_point,Start_tang,Nsection,Start_normal):
+def MultiPCCRegression(Input_Points,Length,Start_point,Start_tang,Nsection,Start_normal,Radius):
     #Setup
     Circle_Points=[Start_point]
     Circle_tang=[Start_tang]
@@ -928,7 +928,7 @@ def MultiPCCRegression(Input_Points,Length,Start_point,Start_tang,Nsection,Start
     
     for i in range(Nsection): #IUteration for each section
         #Computation of the section
-        End_point,End_tang,End_normal,PointInliers,Input_Points,Phi[i],Theta[i],r[i],EndInliers=PCCRegresion(Input_Points, Length, End_point,End_tang,End_normal)
+        End_point,End_tang,End_normal,PointInliers,Input_Points,Phi[i],Theta[i],r[i],EndInliers=PCCRegresion(Input_Points, Length, End_point,End_tang,End_normal,Radius)
         End_point=End_point[0,:] # Reformating variable
         Inliers+=EndInliers
         #Saving data

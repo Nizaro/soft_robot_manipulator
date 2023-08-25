@@ -16,7 +16,7 @@ from Arm_Gen import *
 import timeit
  # Data Acquisition ===========================================================
 start=timeit.default_timer()
-pcd0 = o3d.io.read_point_cloud('Record/pc14.ply')
+pcd0 = o3d.io.read_point_cloud('Record/pc2.ply')
 pcd0 = filterDATA(pcd0)
 pcd1=pcd0
 pcd2=pcd1
@@ -69,7 +69,7 @@ Length=L
 Input_Points=P
 
 #PCC model computation
-Circle_Points, Circle_tang,Circle_normal,Phi,Theta,r,Qn,Inliers=MultiPCCRegression(Input_Points, Length, Start_point, Start_tang, N,Start_normal)
+Circle_Points, Circle_tang,Circle_normal,Phi,Theta,r,Qn,Inliers=MultiPCCRegression(Input_Points, Length, Start_point, Start_tang, N,Start_normal,radius)
 
 stop2=timeit.default_timer()
 print("Arm reconstruction  :",stop2-stop1,"s")
