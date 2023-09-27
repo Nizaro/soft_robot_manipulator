@@ -1,0 +1,208 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Sep  8 17:19:34 2023
+
+@author: leo
+"""
+import open3d as o3d
+import glob
+import copy
+from Filtering3D import *
+from Arm_Gen import *
+import timeit
+import numpy as np
+import csv
+
+DIR='Test_Angles/'
+img=glob.glob(DIR +'*.ply')
+#img2=glob.glob(DIR +'*Ground_Truth.ply')
+img_name=copy.deepcopy(img)
+Nimg=len(img_name)
+Ntest=100
+
+print(Nimg," images loaded, ",Ntest," per images")
+
+Result_mean_all_dist=np.empty(len(img)*Ntest)
+Result_med_all_dist=np.empty(len(img)*Ntest)
+Result_Max_all_Dist=np.empty(len(img)*Ntest)
+Result_Time=np.empty(len(img)*Ntest)
+Result_Acq_Time=np.empty(len(img)*Ntest)
+Result_dev_all_dist=np.empty(len(img)*Ntest)
+Analysis_dev_all=np.empty(len(img))
+Analysis_mean_all=np.empty(len(img))
+Result_Theta1=np.empty(len(img)*Ntest)
+Result_Phi1=np.empty(len(img)*Ntest)
+Result_Theta2=np.empty(len(img)*Ntest)
+Result_Phi2=np.empty(len(img)*Ntest)
+Fail=np.empty(len(img)*Ntest)
+Test_img=[]
+First=True
+for i in range(len(img)):
+    
+    img_name[i]=img_name[i].replace(DIR,'')
+    img_name[i]=img_name[i].replace('.ply','')
+    print("image ",i+1,"/",Nimg," : ",img_name[i])
+    for j in range(Ntest):
+        start=timeit.default_timer()
+        print("     Test ",j+1,"/",Ntest)
+        pcd0 = o3d.io.read_point_cloud(img[i])
+        pcd0=filterDATA(pcd0)
+        
+        pcd1=pcd0
+        pcd0 = o3d.io.read_point_cloud(img[i])
+        pcd0=filterDATA(pcd0)
+    
+        
+        pcd2=pcd1
+        pcd1=pcd1.voxel_down_sample(voxel_size=0.005)
+        stop0=timeit.default_timer()
+        #print("Acquisition         :",stop1-start,"s")
+        pcd1.estimate_normals()
+        stop2=timeit.default_timer()
+        #print("Normal computation  :",stop2-stop1,"s")
+    
+        #start=timeit.default_timer()
+        center = pcd1.get_center()
+        points = np.asarray(pcd1.points)
+        normals=np.asarray(pcd1.normals)
+        PN=np.array([points,normals])
+        PN=np.swapaxes(PN,0,1)
+        PNL=np.ndarray.tolist(PN)
+    
+        
+        #Center points computation ====================================================
+        N=2 #number of segment
+        radius=0.025
+        L=[0.02*18/2,0.02*18/2] #Length of one segment
+    
+        P,Cylinder,pcdVox,pcdInliers=Voxelized_Cylinder(points,pcd1,PNL,radius,radius/5)
+        stop1=timeit.default_timer()
+        #print("Cylinder generation :",stop1-start,"s")
+        #Input parameters =============================================================
+        Start_point=np.array([0.015,-0.25,-0.44])
+        Start_tang=np.array([0,1,-0.28])
+        Start_tang=Start_tang/np.linalg.norm(Start_tang)
+        Start_normal=np.array([0,0.28,1])
+        Start_normal=Start_normal/np.linalg.norm(Start_normal)
+        linepoints=[Start_point,Start_point+Start_tang*L[0],Start_point+Start_normal*L[0]]
+        line=[[0,1],[0,2]]
+        line_set = o3d.geometry.LineSet()
+        line_set.points = o3d.utility.Vector3dVector(linepoints)
+        line_set.lines = o3d.utility.Vector2iVector(line)
+    
+        pcd=o3d.geometry.PointCloud()
+        pcd.points=o3d.utility.Vector3dVector(P)
+        pcd.paint_uniform_color([1,0,1])
+    
+    
+        #o3d.visualization.draw_geometries([line_set,pcd1,pcd])
+        Length=L
+    
+        Input_Points=P
+    
+        #PCC model computation
+        Circle_Points, Circle_tang,Circle_normal,Phi,Theta,r,Qn,Inliers,success=MultiPCCRegression(Input_Points, Length, Start_point, Start_tang, N,Start_normal,radius)
+    
+        stop2=timeit.default_timer()
+        #print("Arm reconstruction  :",stop2-stop1,"s")
+        if success==True:
+            #Surface generation
+            Pn=np.array(Circle_Points)
+            m=100
+            k=50
+            S=SmoothConstructPCC(Pn, Length, k, radius, Qn, m)
+            points=[]
+            for j1 in range(N):
+                
+                for l1 in range(m):
+                    
+                    for i1 in range(k):
+                        points.append(S[:,l1,j1,i1])
+            stop3=timeit.default_timer()
+            #print("Surface generation  :",stop3-stop2,"s")
+            
+            #Simulating camera
+            Camera=np.array([0,0,0])
+            Cameradir=np.array([0,0,1])
+            pcdOutput=o3d.geometry.PointCloud()
+            pcdOutput.points=o3d.utility.Vector3dVector(points)
+            
+            pcdCamera=filterDATA(pcdOutput)
+            pcdCamera,out=Camera_Sim(pcdCamera, Camera, Cameradir, 320, 16/9, 3*np.pi/2, 0)
+            
+            stop4=timeit.default_timer()
+            #print("Camera simulation  :",stop4-stop3,"s")
+            #Display
+            linepoints=[Start_point,Start_point+Start_tang*L[0],Start_point+Start_normal*L[0],Circle_Points[1],Circle_Points[1]+Circle_tang[1]*L[0],Circle_Points[2],Circle_Points[2]+Circle_tang[2]*L[0],
+                        Circle_Points[1]+Circle_normal[1]*L[0],Circle_Points[2]+Circle_normal[2]*L[0]]
+            #linepoints=[Start_point,2*Start_tang,Start_normal,Circle_Points[1],Circle_Points[1]+Circle_tang[1],Circle_Points[2],Circle_Points[2]+Circle_tang[2],Circle_Points[3],Circle_Points[3]+Circle_tang[3]]
+            #linepoints=[Start_point,2*Start_tang,Start_normal,Circle_Points[1],Circle_Points[1]+Circle_tang[1],
+                        # Circle_Points[2],Circle_Points[2]+Circle_tang[2],
+                        # Circle_Points[3],Circle_Points[3]+Circle_tang[3],
+                        # Circle_Points[1],Circle_Points[1]+Circle_normal[1],
+                        # Circle_Points[2],Circle_Points[2]+Circle_normal[2],
+                        # Circle_Points[3],Circle_Points[3]+Circle_normal[3],]
+        
+            line=[[0,1],[0,2],[3,4],[5,6],[3,7],[5,8]]
+            #line=[[0,1],[0,2],[3,4],[5,6],[7,8]]
+            #line=[[0,1],[0,2],[3,4],[5,6],[7,8],[9,10],[11,12],[13,14]]
+            line_set = o3d.geometry.LineSet()
+            line_set.points = o3d.utility.Vector3dVector(linepoints)
+            line_set.lines = o3d.utility.Vector2iVector(line)
+    
+    
+            pcd=o3d.geometry.PointCloud()
+            pcd.points=o3d.utility.Vector3dVector(P)
+            pcd.paint_uniform_color([1,0,1])
+            pcd0.estimate_normals()
+            pcd1=o3d.geometry.PointCloud()
+            pcd1.points=o3d.utility.Vector3dVector(points)
+            pcd1.paint_uniform_color([0,0,0.7])
+            pcd1.estimate_normals()
+            pcd2=o3d.geometry.PointCloud()
+            pcd2.points=o3d.utility.Vector3dVector(Inliers)
+            pcd2.paint_uniform_color([0,1,1])
+        
+        Test_img.append(img_name[i])
+        if success==True:
+            Result_mean_all_dist[i*Ntest+j],Result_med_all_dist[i*Ntest+j],Result_dev_all_dist[i*Ntest+j],Result_Max_all_Dist[i*Ntest+j]=Evaluate_model(pcdCamera, pcd0)
+            Fail[i*Ntest+j]=0
+            Result_Theta1[i*Ntest+j]=Theta[0]
+            Result_Phi1[i*Ntest+j]=Phi[0]
+            Result_Theta2[i*Ntest+j]=Theta[1]
+            Result_Phi2[i*Ntest+j]=Phi[1]
+        else:
+            Result_mean_all_dist[i*Ntest+j],Result_med_all_dist[i*Ntest+j],Result_dev_all_dist[i*Ntest+j],Result_Max_all_Dist[i*Ntest+j]=0,0,0,0
+            Fail[i*Ntest+j]=1
+        Result_Time[i*Ntest+j]=stop2-start
+        Result_Acq_Time[i*Ntest+j]=stop0-start
+        
+        
+        
+        if First :
+            Analysis_mean_all[i]=Result_mean_all_dist[i*Ntest+j]
+            Analysis_dev_all[i]=Result_dev_all_dist[i*Ntest+j]
+            First=False
+        else :
+            prev_mean=Analysis_mean_all[i]
+            Analysis_mean_all[i]=((j+1)*Analysis_mean_all[i]+Result_mean_all_dist[i*Ntest+j])/(j+2)
+            Analysis_dev_all[i]=np.sqrt((((j+1)*Analysis_dev_all[i]**2+Result_dev_all_dist[i*Ntest+j]**2)/(j+2))+((j+1)*(prev_mean-Result_mean_all_dist[i*Ntest+j])**2/(j+2)**2))
+        if j==Ntest:
+            First=True
+        #o3d.visualization.draw_geometries([line_set,pcd,pcd2,pcd0,pcdCamera])
+        
+#Output file 
+with open(DIR+'Test_PCC.csv', 'w', newline='') as file:
+     writer = csv.writer(file)
+     Data=np.array([Test_img,Result_mean_all_dist,Result_med_all_dist,Result_dev_all_dist,Result_Max_all_Dist,Result_Time,Result_Acq_Time,
+                   Result_Theta1,Result_Phi1,Result_Theta2,Result_Phi2,Fail])
+     Data=np.transpose(Data)
+     
+     writer.writerows(Data)
+
+with open(DIR+'Test_PCC_Analysis.csv', 'w', newline='') as file:
+     writer = csv.writer(file)
+     Data=np.array([img_name,Analysis_dev_all,Analysis_mean_all])
+     
+     writer.writerows(Data)
