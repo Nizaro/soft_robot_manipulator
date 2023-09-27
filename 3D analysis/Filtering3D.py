@@ -436,7 +436,7 @@ class Point_Wdata(Model):
 def filterDATA(pcd0):
     #Far point removal
     points = np.asarray(pcd0.points)
-    z1_threshold=-1
+    z1_threshold=-0.6
     pcd1 = pcd0.select_by_index(np.where(points[:,2] > z1_threshold)[0])
     
     points = np.asarray(pcd1.points)
@@ -451,12 +451,16 @@ def filterDATA(pcd0):
     x2_threshold=-0.3
     pcd1 = pcd1.select_by_index(np.where(points[:,0] > x2_threshold)[0])
     
+    points = np.asarray(pcd1.points)
+    y2_threshold=-0.20
+    pcd1 = pcd1.select_by_index(np.where(points[:,1] > y2_threshold)[0])
+    
     
     #White point removal
     white_threshold=0.3
     colors = np.asarray(pcd1.colors)
     color = (colors[:,0]+colors[:,1]+colors[:,2])/3
-    pcd1 = pcd1.select_by_index(np.where(color < white_threshold)[0])
+    #pcd1 = pcd1.select_by_index(np.where(color < white_threshold)[0])
     return pcd1
 
 #Basic linear regression in 3D
@@ -514,8 +518,8 @@ def CylinderDipslay(Bestmodel,pcdInliers):
     return Cylinder
 
 #Application of cylinder RANSAC on each element of a voxelised space
-def Voxelized_Cylinder(points,pcd1,PNL,Radius,Est_Noise):
-    
+def Voxelized_Cylinder(inpoints,pcd1,PNL,Radius,Est_Noise):
+    points=copy.deepcopy(inpoints)
     Voxel_size=max(Radius,3*Est_Noise)                   
     
     if Radius==0 :
@@ -624,7 +628,7 @@ def Voxelized_Cylinder(points,pcd1,PNL,Radius,Est_Noise):
         #else:
             #print('voxel ',i,'/',len(voxels)-1,' skipped',len(pcdi.points))
         pcdInliers.paint_uniform_color([1,0,0])
-    print('    ',len(P),'cylinder generated')
+    #print('    ',len(P),'cylinder generated')
     
     return P,Cylinder,pcdVox,pcdInliers    
     
@@ -707,22 +711,24 @@ def RANSACApprox_Length(P,Est_Noise,Radius,N_seg,L_seg):
 
 #Curve approximation using ransac with Nurbs model with length criterion and known starting point
 def RANSACApprox_Length_Start(P,Start,Est_Noise,Radius,N_seg,L_seg):
-    print('    Centerline RANSAC estimation')
-    params=ransac.RansacParams(samples=max(N_seg*2-1,3), iterations=200, confidence=0.7, threshold=Est_Noise)
+    #print('    Centerline RANSAC estimation')
+    params=ransac.RansacParams(samples=max(N_seg*2-1,3), iterations=200, confidence=0.9, threshold=Est_Noise)
     Curv=Discrete3Dcurve_Length_Start()
     Curv.Start=Start
     Curv.Radius=Radius
     Curv.target_Length=N_seg*L_seg
     CurvInlier,CurvOutlier,Curv,CurvRatio=pyransac.find_inliers(P, Curv, params)
     #If RANSAC with length criterion fail try again without criterion
+    success=True
     if Curv.obj==None:
         print('unable to meet hypothesis')
+        success=False
         params=ransac.RansacParams(samples=max(N_seg*2,3), iterations=200, confidence=0.7, threshold=Est_Noise)
         Curv=Discrete3Dcurve()
         Curv.Radius=Radius
         CurvInlier,out,Curv,CurvRatio=pyransac.find_inliers(P, Curv, params)
-    print('    Inliers kept :',len(CurvInlier),'/',len(P)-2)
-    return CurvInlier,Curv,CurvRatio
+    #print('    Inliers kept :',len(CurvInlier),'/',len(P)-2)
+    return CurvInlier,Curv,CurvRatio,success
 
 #Generation of cylindrical surface from Nurbs center line
 def Generate_ModelSurf(Curv,r):
@@ -774,7 +780,20 @@ def Generate_ModelSurf(Curv,r):
     return pcdSurf,line_set2,Curve,Curvedot
 
 #Evaluation of the quality of a model
-def Evaluate_model(pcdSurf,Curve,Curvedot,pcd2,pcdInliers):
+def Evaluate_model(pcdSurf,pcd2):
+    Result_all_dist=pcdSurf.compute_point_cloud_distance(pcd2)  
+    Result_all_dist=np.asarray(Result_all_dist)
+    Result_mean_all_dist=np.mean(Result_all_dist)
+    Result_dev_all_dist=np.std(Result_all_dist)
+    Result_med_all_dist=np.median(Result_all_dist)
+    Result_1q_all_dist=np.percentile(Result_all_dist, 25)
+    Result_2q_all_dist=np.percentile(Result_all_dist, 75)
+    Result_Max_all_Dist=max(Result_all_dist)
+    
+    
+    return Result_mean_all_dist,Result_med_all_dist,Result_dev_all_dist,Result_Max_all_Dist
+
+def Evaluate_model2(pcdSurf,Curve,Curvedot,pcd2,pcdInliers):
     Result_all_dist=pcd2.compute_point_cloud_distance(pcdSurf)  
     Result_all_dist=np.asarray(Result_all_dist)
     Result_mean_all_dist=np.mean(Result_all_dist)
@@ -800,7 +819,6 @@ def Evaluate_model(pcdSurf,Curve,Curvedot,pcd2,pcdInliers):
     Result_angle=np.arcsin(np.linalg.norm(np.cross(End_dir/np.linalg.norm(End_dir),Start_dir/np.linalg.norm(Start_dir))))
     Result_angle*=180/np.pi
     return Result_angle,Result_length,Result_mean_Inl_dist,Result_mean_all_dist,Result_med_Inl_dist,Result_med_all_dist,Result_dev_all_dist,Result_dev_Inl_dist,Result_Max_Inl_Dist,Result_Max_all_Dist
-
 
 #Compute endpoint of section for a sample point along the section
 def PCCinversion(Start_point,Start_tang,Length,Input_point):
@@ -833,7 +851,6 @@ def PCCRegresion(Input_Points,Length,Start_point,Start_tang,Start_normal,Radius)
     Endpoints=[]
     NonValid=[]
     Dists=[]
-
     #Computation of distances endpoints and sorting of points accordingly (Far away point are ignored and will be passed for nex steps)
     for  i in range(len(Input_Points)):
         newpoint,Valid,Dist=PCCinversion(Start_point, Start_tang, Length, np.array([Input_Points[i]]))
@@ -841,7 +858,10 @@ def PCCRegresion(Input_Points,Length,Start_point,Start_tang,Start_normal,Radius)
             Endpoints.append([newpoint,Input_Points[i]])
         else :
             NonValid.append(Input_Points[i])
-
+    if len(Endpoints)<1:
+        print("erreur")
+        return 0,0,0,0,0,0,0,0,0,False
+    
     #Ransac application to reject outlies
     Inliers,Outliers,Best_Point,ratio=pyransac.find_inliers(Endpoints, PointModel, params)
     #Variable reshapping
@@ -902,7 +922,7 @@ def PCCRegresion(Input_Points,Length,Start_point,Start_tang,Start_normal,Radius)
         PointOutliers[i]=np.array(PointOutliers[i])
         
     
-    return(End_point,End_Tang,End_normal,PointInliers,PointOutliers,Phi,Theta,r,EndInliers)
+    return(End_point,End_Tang,End_normal,PointInliers,PointOutliers,Phi,Theta,r,EndInliers,True)
 
 
 #Application of PCCRegression on lmultiple succesiv sections
@@ -928,7 +948,10 @@ def MultiPCCRegression(Input_Points,Length,Start_point,Start_tang,Nsection,Start
     
     for i in range(Nsection): #IUteration for each section
         #Computation of the section
-        End_point,End_tang,End_normal,PointInliers,Input_Points,Phi[i],Theta[i],r[i],EndInliers=PCCRegresion(Input_Points, Length, End_point,End_tang,End_normal,Radius)
+        End_point,End_tang,End_normal,PointInliers,Input_Points,Phi[i],Theta[i],r[i],EndInliers,sucess=PCCRegresion(Input_Points, Length[i], End_point,End_tang,End_normal,Radius)
+        if sucess==False:
+            return 0,0,0,0,0,0,0,0,False
+            
         End_point=End_point[0,:] # Reformating variable
         Inliers+=EndInliers
         #Saving data
@@ -945,6 +968,6 @@ def MultiPCCRegression(Input_Points,Length,Start_point,Start_tang,Nsection,Start
     
 
     
-    return Circle_Points, Circle_tang,Circle_normal,Phi,Theta,r,Qn,Inliers
+    return Circle_Points, Circle_tang,Circle_normal,Phi,Theta,r,Qn,Inliers,True
 
 
