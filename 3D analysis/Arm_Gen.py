@@ -451,7 +451,7 @@ def Camera_Sim(pcdin,position,orientation,xdef,Aspect_ratio,FOV,Noise_level):
     xres=2*xmax/xdef
     yres=2*ymax/ydef
     pcd2=copy.deepcopy(pcdin)
-    points=np.asarray(pcd2.points)
+    points=np.asarray(pcdin.points)
     points=points-position
 
     ctheta=np.dot(orientation,[0,0,1])
@@ -459,9 +459,10 @@ def Camera_Sim(pcdin,position,orientation,xdef,Aspect_ratio,FOV,Noise_level):
 
     rotvec=np.cross(orientation,[0,0,1])/np.linalg.norm(np.cross(orientation,[0,0,1]))
     rot=Rot.from_rotvec(theta*rotvec)
+    nullrot=(theta==0 or theta == np.pi)
 
-
-    points=rot.apply(points)
+    #points=rot.apply(points)
+    
     #points=points+Camera
     pcd2.points=o3d.utility.Vector3dVector(points)
 
@@ -469,7 +470,7 @@ def Camera_Sim(pcdin,position,orientation,xdef,Aspect_ratio,FOV,Noise_level):
     PointCam=o3d.geometry.PointCloud()
     PointCam.points=o3d.utility.Vector3dVector([position,position+orientation])
     PointCam.paint_uniform_color([0,0,0])
-    #o3d.visualization.draw_geometries([pcd,PointCam,pcd2])
+    #o3d.visualization.draw_geometries([PointCam,pcdin])
 
     points=np.asarray(pcd3.points)
 
@@ -480,7 +481,7 @@ def Camera_Sim(pcdin,position,orientation,xdef,Aspect_ratio,FOV,Noise_level):
     points[:,1]=points[:,1]//yres+ydef/2
 
     #print('Point sorting')
-    SortedPoints= points[(-points[:,2]).argsort()]
+    SortedPoints= points[(points[:,2]).argsort()]
 
     #print('Pixels computation')
     Pixels=np.ones([xdef,ydef,3])
@@ -489,6 +490,7 @@ def Camera_Sim(pcdin,position,orientation,xdef,Aspect_ratio,FOV,Noise_level):
     l=len(SortedPoints)
     for i in range(l):
         A=SortedPoints[i,:]
+        #print("A:",A)
         if A[0]>=0 and A[1]>=0 and A[0]<xdef and A[0]<ydef:
             Pixels[int(A[0]),int(A[1]),:]=A
         else :
@@ -514,9 +516,11 @@ def Camera_Sim(pcdin,position,orientation,xdef,Aspect_ratio,FOV,Noise_level):
 
     
 
-
-    rot=rot.inv()
-    points=rot.apply(points)
+    if nullrot==True :
+        rot=rot
+    else:
+        rot=rot.inv()
+    #points=rot.apply(points)
     #print('pointcloud creation')
 
     pcdCamera.points=o3d.utility.Vector3dVector(points)
