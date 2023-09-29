@@ -48,7 +48,7 @@ Bestmodel=RCylModel()
 params=ransac.RansacParams(samples=3, iterations=1000, confidence=0.99999, threshold=0.003)
 #Ransac application
 
-Inliers,Bestmodel,ratio=pyransac.find_inliers(PNL, Mymodel, params)
+Inliers,Bestmodel,ratio,inliers=pyransac.find_inliers(PNL, Mymodel, params)
 #Inlier reformatting
 Inliers=np.array(Inliers)
 Inliers=Inliers[:,0,:]
