@@ -16,8 +16,10 @@ from Arm_Gen import *
 import timeit
  # Data Acquisition ===========================================================
 start=timeit.default_timer()
-pcd0 = o3d.io.read_point_cloud('Test_Angles/pc10.ply')
+pcd0 = o3d.io.read_point_cloud('08 - Perpendicular 2cam/Cam1/pc5.ply')
 pcd0 = filterDATA(pcd0)
+
+
 pcd1=pcd0
 pcd2=pcd1
 pcd1=pcd1.voxel_down_sample(voxel_size=0.005)
@@ -47,9 +49,9 @@ P,Cylinder,pcdVox,pcdInliers=Voxelized_Cylinder(points,pcd1,PNL,radius,radius/5)
 stop1=timeit.default_timer()
 print("Cylinder generation :",stop1-start,"s")
 #Input parameters =============================================================
-Start_point=np.array([0.015,-0.25,-0.44 ])
 Start_tang=np.array([0,1,-0.28])
 Start_tang=Start_tang/np.linalg.norm(Start_tang)
+Start_point=np.array([0.015,-0.25,-0.44 ])
 Start_normal=np.array([0,0.28,1])
 Start_normal=Start_normal/np.linalg.norm(Start_normal)
 linepoints=[Start_point,Start_point+Start_tang*L[0],Start_point+Start_normal*L[0]]
@@ -67,9 +69,9 @@ pcd.paint_uniform_color([1,0,1])
 Length=L
 
 Input_Points=P
-
+Range_extension=1.5
 #PCC model computation
-Circle_Points, Circle_tang,Circle_normal,Phi,Theta,r,Qn,Inliers,success=MultiPCCRegression(Input_Points, Length, Start_point, Start_tang, N,Start_normal,radius)
+Circle_Points, Circle_tang,Circle_normal,Phi,Theta,r,Qn,Inliers,success=MultiPCCRegression(Input_Points, Length, Start_point, Start_tang, N,Start_normal,radius,Range_extension)
 
 stop2=timeit.default_timer()
 print("Arm reconstruction  :",stop2-stop1,"s")

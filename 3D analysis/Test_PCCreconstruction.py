@@ -50,8 +50,10 @@ Circle_Points=[Start_point]
 Circle_tang=[Start_tang]
 Input_Points=P
 
+radius=0.2
+Range_extension=1
 #First section computation ====================================================
-End_point,End_tang,PointInliers,Input_Points,Phi,Theta,r=PCCRegresion(Input_Points, Length, Start_point, Start_tang,Start_normal)
+End_point,End_tang,End_normal,PointInliers,PointOutliers,Phi,Theta,r,EndInliers,Succes=PCCRegresion(Input_Points, Length, Start_point, Start_tang,Start_normal,radius,Range_extension)
 End_point=End_point[0,:]
 Circle_Points.append(End_point)
 Circle_tang.append(End_tang)
