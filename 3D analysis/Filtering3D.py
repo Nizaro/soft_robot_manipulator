@@ -436,7 +436,7 @@ class Point_Wdata(Model):
 def filterDATA(pcd0):
     #Far point removal
     points = np.asarray(pcd0.points)
-    z1_threshold=-0.6
+    z1_threshold=-1
     pcd1 = pcd0.select_by_index(np.where(points[:,2] > z1_threshold)[0])
     
     points = np.asarray(pcd1.points)
@@ -450,12 +450,14 @@ def filterDATA(pcd0):
     points = np.asarray(pcd1.points)
     x2_threshold=-0.3
     pcd1 = pcd1.select_by_index(np.where(points[:,0] > x2_threshold)[0])
-    
+    '''
     points = np.asarray(pcd1.points)
     y2_threshold=-0.20
     pcd1 = pcd1.select_by_index(np.where(points[:,1] > y2_threshold)[0])
-    
-    
+    '''
+    points = np.asarray(pcd1.points)
+    y2_threshold=-0.20
+    #pcd1 = pcd1.select_by_index(np.where(points[:,1] > y2_threshold)[0])
     #White point removal
     white_threshold=0.3
     colors = np.asarray(pcd1.colors)
@@ -821,10 +823,10 @@ def Evaluate_model2(pcdSurf,Curve,Curvedot,pcd2,pcdInliers):
     return Result_angle,Result_length,Result_mean_Inl_dist,Result_mean_all_dist,Result_med_Inl_dist,Result_med_all_dist,Result_dev_all_dist,Result_dev_Inl_dist,Result_Max_Inl_Dist,Result_Max_all_Dist
 
 #Compute endpoint of section for a sample point along the section
-def PCCinversion(Start_point,Start_tang,Length,Input_point):
+def PCCinversion(Start_point,Start_tang,Length,Input_point,Range_extension):
     Dist=Input_point-Start_point
     Alpha=np.arccos(np.dot(Dist,Start_tang)/(np.linalg.norm(Dist))) #Computation of deviation from starting tangent
-    if np.linalg.norm(Dist) > Length*(np.sin(Alpha)/(Alpha)): #Rejection of point to far to be part of the section
+    if np.linalg.norm(Dist) > Range_extension*Length*(np.sin(Alpha)/(Alpha)): #Rejection of point to far to be part of the section
         Valid=False
         rand=np.array([random.random(),random.random(),random.random()])
         End_point=Start_point+Length*(rand+[1,1,1])
@@ -844,7 +846,7 @@ def PCCinversion(Start_point,Start_tang,Length,Input_point):
 
 
 #Computation of the end point of a circular section based on multiple point along the section (Use RANSAC)
-def PCCRegresion(Input_Points,Length,Start_point,Start_tang,Start_normal,Radius):
+def PCCRegresion(Input_Points,Length,Start_point,Start_tang,Start_normal,Radius,Range_extension):
     #Variable Setup
     params=ransac.RansacParams(1, iterations=100, confidence=0.99999, threshold=Radius)
     PointModel=Point_Wdata()
@@ -853,7 +855,7 @@ def PCCRegresion(Input_Points,Length,Start_point,Start_tang,Start_normal,Radius)
     Dists=[]
     #Computation of distances endpoints and sorting of points accordingly (Far away point are ignored and will be passed for nex steps)
     for  i in range(len(Input_Points)):
-        newpoint,Valid,Dist=PCCinversion(Start_point, Start_tang, Length, np.array([Input_Points[i]]))
+        newpoint,Valid,Dist=PCCinversion(Start_point, Start_tang, Length, np.array([Input_Points[i]]),Range_extension)
         if Valid==True:
             Endpoints.append([newpoint,Input_Points[i]])
         else :
@@ -883,7 +885,7 @@ def PCCRegresion(Input_Points,Length,Start_point,Start_tang,Start_normal,Radius)
     #End_point=np.mean(np.array([EndInliers]),axis=1) 
     
     Dists=np.linalg.norm(PointInliers-Start_point,axis=1)
-    End_point=np.average(np.array([EndInliers]),weights=Dists**4,axis=1) 
+    End_point=np.average(np.array([EndInliers]),weights=(1-abs(1-Dists))**1,axis=1) 
     # for i in range(len(PointInliers)):
     #     if Dists[i]==max(Dists):
     #         End_point[0]=np.array(EndInliers[i])
@@ -926,7 +928,7 @@ def PCCRegresion(Input_Points,Length,Start_point,Start_tang,Start_normal,Radius)
 
 
 #Application of PCCRegression on lmultiple succesiv sections
-def MultiPCCRegression(Input_Points,Length,Start_point,Start_tang,Nsection,Start_normal,Radius):
+def MultiPCCRegression(Input_Points,Length,Start_point,Start_tang,Nsection,Start_normal,Radius,Range_extension):
     #Setup
     Circle_Points=[Start_point]
     Circle_tang=[Start_tang]
@@ -948,7 +950,7 @@ def MultiPCCRegression(Input_Points,Length,Start_point,Start_tang,Nsection,Start
     
     for i in range(Nsection): #IUteration for each section
         #Computation of the section
-        End_point,End_tang,End_normal,PointInliers,Input_Points,Phi[i],Theta[i],r[i],EndInliers,sucess=PCCRegresion(Input_Points, Length[i], End_point,End_tang,End_normal,Radius)
+        End_point,End_tang,End_normal,PointInliers,Input_Points,Phi[i],Theta[i],r[i],EndInliers,sucess=PCCRegresion(Input_Points, Length[i], End_point,End_tang,End_normal,Radius,Range_extension)
         if sucess==False:
             return 0,0,0,0,0,0,0,0,False
             
